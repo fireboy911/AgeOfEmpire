@@ -1,11 +1,11 @@
 from Map import MAP_W, MAP_H
 from typing import List, Dict
 from Engine import SimpleEngine
-from terminalBattle import spawn_asymmetric_armies, run_headless
-from terminalBattle import TerminalRenderer
+from Scenario import spawn_asymmetric_armies
+from TerminalRenderer import TerminalRenderer
 import random
 import curses
-from Client import parse_args
+from Client import parse_args, run_headless
 from Generals import DaftGeneral, BrainDeadGeneral
 def main():
     args = parse_args()
