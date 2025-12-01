@@ -78,11 +78,21 @@ class Unit:
                 target.hp = 0
                 engine.mark_dead(target)
         else:
-            dx = target.x - self.x
-            dy = target.y - self.y
-            dist = math.hypot(dx, dy)
-            if dist > 1e-6:
-                nx = dx / dist
-                ny = dy / dist
-                self.x += nx * self.speed * dt
-                self.y += ny * self.speed * dt
+            # Calcule la distance que l'unité doit parcourir pour être à portée
+            distance_to_move = d - self.range 
+            
+            # S'assurer que l'unité n'avance pas au-delà de sa vitesse max
+            # et qu'elle ne se déplace pas trop loin (juste assez pour atteindre la portée)
+            move_distance = min(self.speed * dt, distance_to_move)
+
+            if move_distance > 1e-6:
+                dx = target.x - self.x
+                dy = target.y - self.y
+                dist = math.hypot(dx, dy)
+                
+                if dist > 1e-6:
+                    nx = dx / dist
+                    ny = dy / dist
+                    self.x += nx * move_distance
+                    self.y += ny * move_distance
+                
