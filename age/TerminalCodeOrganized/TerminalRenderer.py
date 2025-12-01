@@ -49,7 +49,7 @@ class TerminalRenderer:
         for yy in range(view_h):
             row = []
             for xx in range(view_w):
-                row.append('.')
+                row.append('')
             stdscr.addstr(1+yy, 1, ''.join(row))
 
         # draw units
@@ -152,4 +152,5 @@ class TerminalRenderer:
         return 'quit'
 
     def run(self):
+
         return wrapper(self.run_curses)
