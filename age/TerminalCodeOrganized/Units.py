@@ -1,98 +1,105 @@
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import Tuple, Optional
 import math
+from GameData import UNIT_STATS, BONUS_DAMAGE
+
 @dataclass
 class Unit:
     id: int
     player: int
     x: float
     y: float
+    unit_type: str
     hp: float = 0.0
-    attack: float = 50.0
-    range: float = 1.0
-    speed: float = 1.0
+    attack: float = 0.0
+    range: float = 0.0
+    speed: float = 0.0
     alive: bool = True
     target_id: Optional[int] = None
-    regen: float = 0.0
-    unit_type: str = "Pikeman*"
-    color: Optional[Tuple[int,int,int]] = None  # unused by curses but kept
+    color: Optional[Tuple[int,int,int]] = None
+    reload_time: float = 2.0  # Temps entre deux attaques
+    cooldown: float = 0.0     # Temps restant avant prochaine attaque
 
     def __post_init__(self):
+        # 1. Charger les stats depuis GameData si non fournies
+        stats = UNIT_STATS.get(self.unit_type, UNIT_STATS["Pikeman"]) # Fallback Pikeman
+        
+        if self.hp == 0: self.hp = stats["hp"]
+        if self.attack == 0: self.attack = stats["attack"]
+        if self.range == 0: self.range = stats["range"]
+        if self.speed == 0: self.speed = stats["speed"]
+        self.reload_time = stats.get("reload", 2.0)
+
+        # 2. Définir la couleur
         type_colors = {
-            "Pikeman*": (200, 50, 50),
-            "Crossbowman": (255, 200, 50),
-            "knight": (180, 180, 180),
-            "mage": (120, 50, 200),
-            "Monk": (50, 200, 120)
+            "Pikeman": (255, 100, 50),
+            "Crossbowman": (50, 200, 50),
+            "Knight": (50, 100, 255),
+            "Monk": (255, 255, 255)
         }
         if self.color is None:
-            self.color = type_colors.get(self.unit_type, (255, 255, 255))
+            # Assombrir la couleur pour le joueur 2
+            base_col = type_colors.get(self.unit_type, (150, 150, 150))
+            if self.player == 2:
+                self.color = (max(0, base_col[0]-50), max(0, base_col[1]-50), max(0, base_col[2]-50))
+            else:
+                self.color = base_col
 
     def distance_to(self, other: "Unit") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
 
-    def step(self, dt: float, engine: "SimpleEngine"):
-        if not self.alive:
-            return
+    def step(self, dt: float, engine):
+        if not self.alive: return
 
-        if self.regen > 0:
-            self.hp = min(self.hp + self.regen * dt, 55)
+        # Gestion du cooldown d'attaque
+        if self.cooldown > 0:
+            self.cooldown -= dt
 
-        # Monk healing behavior
+        # Logique Moine (Soin)
         if self.unit_type == "Monk":
-            heal_range = self.range
-            heal_power = self.attack * dt * 2
-            allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < 55]
-            if not allies:
-                return
-            target = min(allies, key=lambda a: self.distance_to(a))
-            dist = self.distance_to(target)
-            if dist <= heal_range:
-                target.hp = min(target.hp + heal_power, 55)
-            else:
-                dx = target.x - self.x
-                dy = target.y - self.y
-                dist = math.hypot(dx, dy)
-                if dist > 1e-6:
-                    nx = dx / dist
-                    ny = dy / dist
-                    self.x += nx * self.speed * dt
-                    self.y += ny * self.speed * dt
+            self._handle_monk_behavior(dt, engine)
             return
 
-        # normal combat logic
-        target = None
-        if self.target_id is not None:
-            target = engine.units_by_id.get(self.target_id)
-
+        # Logique Combat Standard
+        target = engine.units_by_id.get(self.target_id)
         if target is None or not target.alive:
             self.target_id = None
             return
 
         d = self.distance_to(target)
-        if d <= self.range + 0.1:
-            damage = self.attack * dt
-            target.hp -= damage
-            if target.hp <= 0:
-                target.alive = False
-                target.hp = 0
-                engine.mark_dead(target)
+        
+        # SI à portée : Attaquer
+        if d <= self.range + 0.1: # Petite tolérance
+            if self.cooldown <= 0:
+                self._attack(target, engine)
+                self.cooldown = self.reload_time
+        
+        # SINON : Avancer
         else:
-            # Calcule la distance que l'unité doit parcourir pour être à portée
-            distance_to_move = d - self.range 
-            
-            # S'assurer que l'unité n'avance pas au-delà de sa vitesse max
-            # et qu'elle ne se déplace pas trop loin (juste assez pour atteindre la portée)
-            move_distance = min(self.speed * dt, distance_to_move)
+            self._move_towards(target, dt)
 
-            if move_distance > 1e-6:
-                dx = target.x - self.x
-                dy = target.y - self.y
-                dist = math.hypot(dx, dy)
-                
-                if dist > 1e-6:
-                    nx = dx / dist
-                    ny = dy / dist
-                    self.x += nx * move_distance
-                    self.y += ny * move_distance
-                
+    def _move_towards(self, target, dt):
+        dx = target.x - self.x
+        dy = target.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 1e-6:
+            # Normalisation et déplacement
+            nx, ny = dx/dist, dy/dist
+            self.x += nx * self.speed * dt
+            self.y += ny * self.speed * dt
+
+    def _attack(self, target, engine):
+        # Calcul des dégâts avec BONUS (Pierre-Papier-Ciseaux)
+        base_dmg = self.attack
+        bonus = BONUS_DAMAGE.get(self.unit_type, {}).get(target.unit_type, 0)
+        
+        total_damage = max(1, base_dmg + bonus)
+        
+        target.hp -= total_damage
+        if target.hp <= 0:
+            target.alive = False
+            engine.mark_dead(target)
+
+    def _handle_monk_behavior(self, dt, engine):
+        # Code du moine simplifié pour l'instant
+        pass
