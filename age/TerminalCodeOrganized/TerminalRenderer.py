@@ -161,20 +161,53 @@ class TerminalRenderer:
         stdscr.timeout(50)
         running = True
         last = time.time()
+        
+        # Variables pour la fin de partie
+        game_over = False
+        winner = 0
+
         while running:
             now = time.time()
             dt = now - last
             last = now
+            
             inp = self.handle_input(stdscr, dt)
-            if inp == 'reset':
-                return 'reset'
-            if inp is False:
-                break
-            if not self.paused:
+            if inp == 'reset': return 'reset'
+            if inp is False: break
+            
+            # --- LOGIQUE DE JEU ---
+            if not self.paused and not game_over:
                 sim_dt = dt * self.speed_multiplier
                 sim_dt = min(sim_dt, 0.5)
                 self.engine.step(sim_dt, self.generals)
+                
+                # VERIFICATION VICTOIRE
+                p1 = self.engine.get_units_for_player(1)
+                p2 = self.engine.get_units_for_player(2)
+                
+                if not p1 and not p2:
+                    winner = 0 # Egalité
+                    game_over = True
+                elif not p2:
+                    winner = 1
+                    game_over = True
+                elif not p1:
+                    winner = 2
+                    game_over = True
+
+            # --- DESSIN ---
             self.draw(stdscr)
+            
+            # Affichage du message de fin par dessus
+            if game_over:
+                h, w = stdscr.getmaxyx()
+                msg = f" VICTOIRE JOUEUR {winner} ! (Appuyez sur Q) "
+                try:
+                    # On centre le message
+                    stdscr.addstr(h//2, max(0, w//2 - len(msg)//2), msg, curses.A_REVERSE | curses.A_BOLD)
+                except:
+                    pass
+
         return 'quit'
 
     def run(self):
