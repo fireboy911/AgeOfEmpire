@@ -3,7 +3,8 @@ from typing import Dict, Tuple
 from Engine import SimpleEngine
 from Generals import General
 from Units import Unit
-from Map import TILE_SIZE, MAP_W, MAP_H
+from Map import TILE_SIZE, MAP_W, MAP_H 
+from HtmlRapport import generate_snapshot_report
 SCREEN_W, SCREEN_H = 960, 640
 FPS = 60
 camera_speed = 10.0
@@ -69,35 +70,114 @@ class PygameRenderer:
             self.screen.blit(mm_surf, (SCREEN_W - mm_w - 8, 8))
         pygame.display.flip()
 
-    def handle_input(self):
+   def handle_input(self):
         keys = pygame.key.get_pressed()
         dt = self.clock.get_time()/1000.0
-        move_speed = camera_speed * dt * (1 + self.speed_multiplier)
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]: self.cam_x -= move_speed
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: self.cam_x += move_speed
-        if keys[pygame.K_UP] or keys[pygame.K_w]: self.cam_y -= move_speed
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]: self.cam_y += move_speed
-        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - SCREEN_W//TILE_SIZE))
-        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - SCREEN_H//TILE_SIZE))
+        
+        # Gestion du Shift pour aller plus vite
+        base_speed = camera_speed
+        if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+            base_speed *= 3.0 # Facteur 3 si Shift appuyé 
 
+        move = base_speed * dt
+        
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: self.cam_x -= move
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: self.cam_x += move
+        if keys[pygame.K_UP] or keys[pygame.K_w]: self.cam_y -= move
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]: self.cam_y += move
+        
+        # Clamp...
+    def draw_game_over(self, winner_id):
+        # Fond semi-transparent
+        s = pygame.Surface((SCREEN_W, SCREEN_H))
+        s.set_alpha(128)
+        s.fill((0,0,0))
+        self.screen.blit(s, (0,0))
+        
+        # Texte de victoire
+        font = pygame.font.SysFont(None, 72)
+        if winner_id == 0:
+            txt = "EGALITE / TIMEOUT"
+            color = (200, 200, 200)
+        else:
+            txt = f"VICTOIRE JOUEUR {winner_id} !"
+            color = (255, 50, 50) if winner_id == 1 else (50, 50, 255)
+            
+        text_surf = font.render(txt, True, color)
+        text_rect = text_surf.get_rect(center=(SCREEN_W/2, SCREEN_H/2))
+        self.screen.blit(text_surf, text_rect)
+        
+        # Instructions
+        font_small = pygame.font.SysFont(None, 36)
+        help_surf = font_small.render("Appuyez sur ESC pour quitter", True, (255, 255, 255))
+        help_rect = help_surf.get_rect(center=(SCREEN_W/2, SCREEN_H/2 + 60))
+        self.screen.blit(help_surf, help_rect)
     def run(self):
         running = True
+        game_over = False
+        winner = 0
+
         while running:
             dt_real = self.clock.tick(FPS)/1000.0
+            
+            # --- 1. GESTION DES EVENEMENTS ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE: running = False
-                    elif event.key == pygame.K_p: self.paused = not self.paused
-                    elif event.key == pygame.K_m: self.show_minimap = not self.show_minimap
-                    elif event.key in (pygame.K_PLUS, pygame.K_EQUALS): self.speed_multiplier *= 2.0
-                    elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE): self.speed_multiplier = max(0.125, self.speed_multiplier/2.0)
+                    # ESC : Quitter
+                    if event.key == pygame.K_ESCAPE: 
+                        running = False
+                    
+                    # P : Pause
+                    elif event.key == pygame.K_p: 
+                        self.paused = not self.paused
+                    
+                    # TAB : Snapshot HTML + Pause (Requis PDF)
+                    elif event.key == pygame.K_TAB:
+                        self.paused = True
+                        generate_snapshot_report(self.engine, self.generals)
+                    
+                    # M : Minimap
+                    elif event.key == pygame.K_m: 
+                        self.show_minimap = not self.show_minimap
+                    
+                    # Vitesse Jeu
+                    elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS): 
+                        self.speed_multiplier *= 2.0
+                    elif event.key in (pygame.K_MINUS, pygame.K_6, pygame.K_KP_MINUS): 
+                        self.speed_multiplier = max(0.125, self.speed_multiplier/2.0)
+            
+            # Gestion caméra (Shift, Flèches...)
             self.handle_input()
-            if not self.paused:
+
+            # --- 2. LOGIQUE DU JEU ---
+            if not self.paused and not game_over:
                 sim_dt = dt_real * self.speed_multiplier
                 sim_dt = min(sim_dt, 0.5)
                 self.engine.step(sim_dt, self.generals)
+                
+                # VERIFICATION VICTOIRE (Arrête le jeu si une armée est morte)
+                p1 = self.engine.get_units_for_player(1)
+                p2 = self.engine.get_units_for_player(2)
+                
+                if not p1 and not p2:
+                    winner = 0 # Egalité rare
+                    game_over = True
+                elif not p2:
+                    winner = 1
+                    game_over = True
+                elif not p1:
+                    winner = 2
+                    game_over = True
+
+            # --- 3. DESSIN ---
             self.screen.fill((0,0,0))
-            self.draw()
+            self.draw() # Carte et unités
+            
+            if game_over:
+                self.draw_game_over(winner)
+            
+            pygame.display.flip()
+
         pygame.quit()
