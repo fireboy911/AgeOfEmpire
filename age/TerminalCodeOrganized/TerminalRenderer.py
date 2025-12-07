@@ -5,7 +5,8 @@ from Units import Unit
 from Generals import General
 from typing import List, Dict
 import time
-from Engine import SimpleEngine
+from Engine import SimpleEngine 
+from HtmlRapport import generate_snapshot_report
 try:
     import curses
     from curses import wrapper
@@ -116,43 +117,64 @@ class TerminalRenderer:
             
         stdscr.refresh()
 
+    # Ajoutez l'import en haut du fichier
+   
+
+    # ... dans la classe TerminalRenderer ...
+
     def handle_input(self, stdscr, dt):
         ch = stdscr.getch()
-        if ch == -1:
-            return True
-        # map keys
-        if ch in (ord('q'), ord('Q')):
-            return False
-        if ch in (ord('p'), ord(' ')):
+        if ch == -1: return True
+
+        # Q : Quitter
+        if ch in (ord('q'), ord('Q')): return False
+        
+        # R : Reset
+        if ch in (ord('r'), ord('R')): return 'reset'
+
+        # P : Pause
+        if ch in (ord('p'), ord('P'), ord(' ')):
             self.paused = not self.paused
-        if ch in (ord('+'), ord('=')):
-            self.speed_multiplier *= 2.0
-        if ch in (ord('-'), ord('_')):
-            self.speed_multiplier = max(0.125, self.speed_multiplier/2.0)
-        if ch in (9,):  # Tab
-            my_units = self.engine.get_units_for_player(1)
-            if my_units:
-                self.selected_idx = (self.selected_idx + 1) % len(my_units)
-        if ch in (ord('t'), ord('T')):
-            # set selected unit's target to nearest enemy
-            my_units = self.engine.get_units_for_player(1)
-            if my_units and self.selected_idx < len(my_units):
-                su = my_units[self.selected_idx]
-                enemies = [e for e in self.engine.units if e.player != 1 and e.alive]
-                if enemies:
-                    nearest = min(enemies, key=lambda e: su.distance_to(e))
-                    su.target_id = nearest.id
-        if ch in (ord('r'), ord('R')):
-            return 'reset'
-        # panning
-        if ch in (curses.KEY_LEFT, ord('a'), ord('A')):
-            self.cam_x = clamp(self.cam_x - camera_speed*dt, 0, max(0, self.engine.w - 1))
-        if ch in (curses.KEY_RIGHT, ord('d'), ord('D')):
-            self.cam_x = clamp(self.cam_x + camera_speed*dt, 0, max(0, self.engine.w - 1))
-        if ch in (curses.KEY_UP, ord('w'), ord('W')):
-            self.cam_y = clamp(self.cam_y - camera_speed*dt, 0, max(0, self.engine.h - 1))
-        if ch in (curses.KEY_DOWN, ord('s'), ord('S')):
-            self.cam_y = clamp(self.cam_y + camera_speed*dt, 0, max(0, self.engine.h - 1))
+
+        # TAB (Code ASCII 9) : Snapshot HTML + Pause
+        if ch == 9: 
+            self.paused = True # Le PDF demande de mettre en pause
+            generate_snapshot_report(self.engine, self.generals)
+
+        # +/- : Vitesse du jeu
+        if ch in (ord('+'), ord('=')): self.speed_multiplier *= 2.0
+        if ch in (ord('-'), ord('_')): self.speed_multiplier = max(0.125, self.speed_multiplier/2.0)
+
+        # DEPLACEMENT CAMERA (Scrolling)
+        # Shift est géré par les majuscules ('a' vs 'A')
+        # Vitesse normale
+        move = camera_speed * dt
+        # Vitesse rapide (Shift maintenu -> Majuscule)
+        fast_move = move * 3.0 
+
+        if ch == ord('a'): self.cam_x -= move
+        if ch == ord('A'): self.cam_x -= fast_move # Shift+A
+        
+        if ch == ord('d'): self.cam_x += move
+        if ch == ord('D'): self.cam_x += fast_move # Shift+D
+        
+        if ch == ord('w'): self.cam_y -= move
+        if ch == ord('W'): self.cam_y -= fast_move # Shift+W
+        
+        if ch == ord('s'): self.cam_y += move
+        if ch == ord('S'): self.cam_y += fast_move # Shift+S
+        
+        # Gestion Flèches (Curses ne détecte pas toujours Shift+Flèche facilement, 
+        # on garde vitesse normale pour les flèches simples)
+        if ch == curses.KEY_LEFT: self.cam_x -= move
+        if ch == curses.KEY_RIGHT: self.cam_x += move
+        if ch == curses.KEY_UP: self.cam_y -= move
+        if ch == curses.KEY_DOWN: self.cam_y += move
+
+        # Clamp
+        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - 1))
+        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - 1))
+
         return True
 
     def run_curses(self, stdscr):
