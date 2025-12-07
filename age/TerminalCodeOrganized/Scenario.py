@@ -1,85 +1,61 @@
 from Engine import SimpleEngine
-def spawn_asymmetric_armies(engine: "SimpleEngine", left_offset=10, right_offset=10):
-    mid_x = engine.w / 2
-    mid_y = engine.h / 2
+from GameData import UNIT_STATS
 
-    type_stats = {
-        "Pikeman": {"hp": 55, "attack": 6, "range": 1.0, "speed": 1.0},
-        "Crossbowman":{"hp": 40, "attack": 12, "range": 10.0, "speed": 1.0},
-        "knight": {"hp": 70, "attack": 8, "range": 1.2, "speed": 1.5},
-        "Monk": {"hp": 55, "attack": 1.5, "range": 5.0, "speed": 1.0, "regen": 2.0},
-    }
+def create_lanchester_scenario(engine: SimpleEngine, unit_type: str, n: int, spacing: int = 20):
+    """
+    Scénario pour tester les lois de Lanchester (Requis PDF).
+    Player 1 : N unités
+    Player 2 : 2*N unités (Force supérieure)
+    """
+    if unit_type not in UNIT_STATS:
+        print(f"Attention: Type d'unité inconnu '{unit_type}', défaut sur Pikeman")
+        unit_type = "Pikeman"
 
-    type_colors = {
-        1: {  # Player 1
-            "Pikeman": (255, 100, 50),
-            "Crossbowman": (255, 50, 50),
-            "knight": (200, 0, 0),
-            "Monk": (255, 150, 100),
-        },
-        2: {  # Player 2
-            "Pikeman": (50, 150, 255),
-            "Crossbowman": (100, 200, 255),
-            "knight": (0, 100, 255),
-            "Monk": (150, 200, 255),
-        }
-    }
+    mid_x, mid_y = engine.w / 2, engine.h / 2
+    
+    # Armée P1 (Gauche)
+    for i in range(n):
+        # Formation en ligne verticale
+        engine.spawn_unit(player=1, x=mid_x - spacing, y=mid_y - n//2 + i, unit_type=unit_type)
 
-    # Player 1 left
-    side_dir = 1
+    # Armée P2 (Droite) - Deux fois plus nombreuse
+    for i in range(n * 2):
+        # Formation en ligne (plus serrée ou double ligne pour que ça rentre)
+        x_pos = mid_x + spacing + (i % 2) # Légère profondeur
+        y_pos = mid_y - n + i
+        engine.spawn_unit(player=2, x=x_pos, y=y_pos, unit_type=unit_type)
+
+
+def spawn_asymmetric_armies(engine: SimpleEngine, left_offset=15, right_offset=15):
+    """
+    Scénario de démonstration avec différentes unités.
+    """
+    mid_x, mid_y = engine.w / 2, engine.h / 2
+
+    # Configuration des couleurs spécifiques pour la démo (Optionnel, sinon géré par Unit)
+    # On laisse Unit gérer les couleurs par défaut via GameData maintenant.
+
+    # --- JOUEUR 1 (Gauche) : Cavalerie lourde et Moines ---
+    # Formation de Chevaliers (Knight)
     anchor_x = mid_x - left_offset
     for i in range(3):
-        x = anchor_x - i * 2 * side_dir
-        y = mid_y + i
-        unit_type = "knight"
-        engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[1][unit_type], **type_stats[unit_type])
-    for row in range(3):
-       for i in range(-row, row+1, 2):
-        x = anchor_x - row * 4 * side_dir
-        y = mid_y + i
-        engine.spawn_unit(player=1, x=x, y=y, unit_type="Pikeman*", 
-                          color=type_colors[1]["Pikeman"], **type_stats["Pikeman"])
-        unit_type = "Pikeman"
-        engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[1][unit_type], **type_stats[unit_type])
+        engine.spawn_unit(1, x=anchor_x, y=mid_y - 2 + (i*2), unit_type="Knight")
+    
+    # Soutien Piquiers (Pikeman)
     for i in range(4):
-        x = anchor_x - i * 2 * side_dir
-        y = mid_y + 2
-        unit_type = "Crossbowman"
-        engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[1][unit_type], **type_stats[unit_type])
-    for i in range(2):
-        x = anchor_x - i * 6 * side_dir
-        y = mid_y - 3 + i * 6
-        unit_type = "Monk"
-        engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[1][unit_type], **type_stats[unit_type])
+        engine.spawn_unit(1, x=anchor_x - 2, y=mid_y - 3 + (i*2), unit_type="Pikeman")
 
-    # Player 2 right
-    side_dir = -1
+    # Moines (Monk) en arrière
+    engine.spawn_unit(1, x=anchor_x - 5, y=mid_y, unit_type="Monk")
+
+
+    # --- JOUEUR 2 (Droite) : Armée à distance (Archers) et Piquiers ---
     anchor_x = mid_x + right_offset
-    for i in range(4):
-        x = anchor_x - i * 2 * side_dir
-        y = mid_y - 2
-        unit_type = "Crossbowman"
-        engine.spawn_unit(player=2, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[2][unit_type], **type_stats[unit_type])
-    for i in range(3):
-        x = anchor_x - i * 2 * side_dir
-        y = mid_y
-        unit_type = "knight"
-        engine.spawn_unit(player=2, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[2][unit_type], **type_stats[unit_type])
+    
+    # Ligne de front Piquiers (Pikeman) pour protéger les archers
     for i in range(5):
-        x = anchor_x - i * 2 * side_dir
-        y = mid_y + 2
-        unit_type = "Pikeman"
-        engine.spawn_unit(player=2, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[2][unit_type], **type_stats[unit_type])
-    for i in range(2):
-        x = anchor_x - i * 6 * side_dir
-        y = mid_y - 3 + i * 6
-        unit_type = "Monk"
-        engine.spawn_unit(player=2, x=x, y=y, unit_type=unit_type,
-                          color=type_colors[2][unit_type], **type_stats[unit_type])
+        engine.spawn_unit(2, x=anchor_x, y=mid_y - 4 + (i*2), unit_type="Pikeman")
+
+    # Ligne arrière Arbalétriers (Crossbowman)
+    for i in range(4):
+        engine.spawn_unit(2, x=anchor_x + 3, y=mid_y - 3 + (i*2), unit_type="Crossbowman")
