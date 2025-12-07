@@ -5,7 +5,7 @@ def spawn_asymmetric_armies(engine: "SimpleEngine", left_offset=10, right_offset
 
     type_stats = {
         "Pikeman": {"hp": 55, "attack": 6, "range": 1.0, "speed": 1.0},
-        "Crossbowman":{"hp": 40, "attack": 12, "range": 5.0, "speed": 1.0},
+        "Crossbowman":{"hp": 40, "attack": 12, "range": 10.0, "speed": 1.0},
         "knight": {"hp": 70, "attack": 8, "range": 1.2, "speed": 1.5},
         "Monk": {"hp": 55, "attack": 1.5, "range": 5.0, "speed": 1.0, "regen": 2.0},
     }
