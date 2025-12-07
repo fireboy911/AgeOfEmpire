@@ -4,6 +4,8 @@ from Engine import SimpleEngine
 from Generals import General
 from Units import Unit
 from Map import TILE_SIZE, MAP_W, MAP_H
+import os
+import math
 SCREEN_W, SCREEN_H = 960, 640
 FPS = 60
 camera_speed = 10.0
@@ -24,6 +26,83 @@ class PygameRenderer:
         self.speed_multiplier = 1.0
         self.paused = False
         self.show_minimap = True
+        
+        # Load textures
+        self.load_textures()
+
+    def load_textures(self):
+        """Load all terrain and unit textures"""
+        assets_path = os.path.join(os.path.dirname(__file__), 'assets')
+        
+        # Load terrain textures
+        self.terrain_textures = []
+        try:
+            grass1 = pygame.image.load(os.path.join(assets_path, 'terrain', 'grass1.png'))
+            grass2 = pygame.image.load(os.path.join(assets_path, 'terrain', 'grass2.png'))
+            self.terrain_textures = [
+                pygame.transform.scale(grass1, (TILE_SIZE, TILE_SIZE)),
+                pygame.transform.scale(grass2, (TILE_SIZE, TILE_SIZE))
+            ]
+        except Exception as e:
+            print(f"Warning: Could not load terrain textures: {e}")
+            self.terrain_textures = None
+        
+        # Load unit textures: {(unit_type, player, direction): surface}
+        self.unit_textures = {}
+        unit_types = ['Pikeman', 'Crossbowman', 'Knight', 'Long_Swordman']
+        colors = {1: 'red', 2: 'blue'}
+        directions = ['up', 'down', 'left', 'right']
+        
+        for unit_type in unit_types:
+            for player, color in colors.items():
+                for direction in directions:
+                    try:
+                        path = os.path.join(assets_path, 'units', unit_type, color, f'{direction}.png')
+                        img = pygame.image.load(path)
+                        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        self.unit_textures[(unit_type, player, direction)] = img
+                    except Exception as e:
+                        print(f"Warning: Could not load {unit_type}/{color}/{direction}: {e}")
+        
+        # Also handle Monk (if images exist)
+        for player, color in colors.items():
+            for direction in directions:
+                try:
+                    path = os.path.join(assets_path, 'units', 'Monk', color, f'{direction}.png')
+                    if os.path.exists(path):
+                        img = pygame.image.load(path)
+                        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        self.unit_textures[('Monk', player, direction)] = img
+                except:
+                    pass
+
+    def get_unit_direction(self, unit: Unit) -> str:
+        """Determine which direction the unit is facing based on target or last movement"""
+        if not hasattr(unit, 'last_x'):
+            unit.last_x = unit.x
+            unit.last_y = unit.y
+        
+        # Calculate direction based on target
+        target = None
+        if unit.target_id and unit.target_id in self.engine.units_by_id:
+            target = self.engine.units_by_id[unit.target_id]
+        
+        if target:
+            dx = target.x - unit.x
+            dy = target.y - unit.y
+        else:
+            dx = unit.x - unit.last_x
+            dy = unit.y - unit.last_y
+        
+        # Store current position for next frame
+        unit.last_x = unit.x
+        unit.last_y = unit.y
+        
+        # Determine direction based on angle
+        if abs(dx) > abs(dy):
+            return 'right' if dx > 0 else 'left'
+        else:
+            return 'down' if dy > 0 else 'up'
 
     def world_to_screen(self, wx, wy) -> Tuple[int,int]:
         sx = int((wx - self.cam_x) * TILE_SIZE)
@@ -33,24 +112,60 @@ class PygameRenderer:
     def draw(self):
         cols = SCREEN_W // TILE_SIZE + 2
         rows = SCREEN_H // TILE_SIZE + 2
+        
+        # Draw terrain
         for i in range(cols):
             for j in range(rows):
                 tx = self.cam_x + i
                 ty = self.cam_y + j
+                
                 if tx < 0 or ty < 0 or tx >= self.engine.w or ty >= self.engine.h:
+                    # Out of bounds - draw grey
                     color = (50,50,50)
+                    pygame.draw.rect(self.screen, color, (i*TILE_SIZE, j*TILE_SIZE, TILE_SIZE+1, TILE_SIZE+1))
+                elif self.terrain_textures:
+                    # Use only grass1 texture for all tiles
+                    self.screen.blit(self.terrain_textures[0], (i*TILE_SIZE, j*TILE_SIZE))
                 else:
+                    # Fallback to colored rectangles
                     color = (34,139,34) if (int(tx)+int(ty))%2==0 else (40,120,40)
-                pygame.draw.rect(self.screen, color, (i*TILE_SIZE, j*TILE_SIZE, TILE_SIZE+1, TILE_SIZE+1))
+                    pygame.draw.rect(self.screen, color, (i*TILE_SIZE, j*TILE_SIZE, TILE_SIZE+1, TILE_SIZE+1))
+        
+        # Draw units
         for u in self.engine.units:
             sx, sy = self.world_to_screen(u.x, u.y)
-            col = u.color
-            r = int(TILE_SIZE*0.4)
-            pygame.draw.circle(self.screen, col, (sx+TILE_SIZE//2, sy+TILE_SIZE//2), r)
+            
+            # Get unit type (normalize name)
+            unit_type = u.unit_type
+            if unit_type.lower().startswith('pik'):
+                unit_type = 'Pikeman'
+            elif unit_type.lower().startswith('cross'):
+                unit_type = 'Crossbowman'
+            elif unit_type.lower().startswith('knight'):
+                unit_type = 'Knight'
+            elif unit_type.lower().startswith('monk'):
+                unit_type = 'Monk'
+            
+            # Get direction
+            direction = self.get_unit_direction(u)
+            
+            # Try to use texture, fallback to circle
+            texture_key = (unit_type, u.player, direction)
+            if texture_key in self.unit_textures:
+                self.screen.blit(self.unit_textures[texture_key], (sx, sy))
+            else:
+                # Fallback to colored circle
+                col = u.color
+                r = int(TILE_SIZE*0.4)
+                pygame.draw.circle(self.screen, col, (sx+TILE_SIZE//2, sy+TILE_SIZE//2), r)
+            
+            # Draw HP bar
             hp_frac = clamp(u.hp / 55.0, 0.0, 1.0)
             bar_w = int(TILE_SIZE * hp_frac)
             pygame.draw.rect(self.screen, (0,0,0), (sx, sy-6, TILE_SIZE, 4))
             pygame.draw.rect(self.screen, (0,255,0), (sx, sy-6, bar_w, 4))
+        
+        # Draw HUD
         font = pygame.font.SysFont(None, 20)
         txt = f"Tick: {self.engine.tick:.2f}  Units: {len(self.engine.units)}  Speed x{self.speed_multiplier:.1f}"
         surf = font.render(txt, True, (255,255,255))
