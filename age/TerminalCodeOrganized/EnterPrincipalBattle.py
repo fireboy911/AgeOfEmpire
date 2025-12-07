@@ -33,33 +33,52 @@ def start_battle(args):
     if args.seed:
         random.seed(args.seed)
 
-    # Initialisation Moteur
-    engine = SimpleEngine(MAP_W, MAP_H)
-    
-    # Setup Scénario (Pour l'instant en dur, à rendre dynamique plus tard)
-    spawn_asymmetric_armies(engine)
+    # Boucle principale pour permettre le "Reset" (Touche R)
+    while True:
+        # 1. Initialisation Moteur (Nouvelle instance à chaque reset)
+        engine = SimpleEngine(MAP_W, MAP_H)
+        
+        # 2. Setup Scénario
+        # Utilise votre fonction corrigée dans Scenario.py
+        spawn_asymmetric_armies(engine) 
 
-    # Setup Généraux
-    generals = {
-        1: DaftGeneral(1), 
-        2: BrainDeadGeneral(2) # A remplacer par votre SmartGeneral plus tard
-    }
+        # 3. Setup Généraux
+        generals = {
+            1: DaftGeneral(1), 
+            2: BrainDeadGeneral(2) 
+        }
 
-    # Choix du Renderer
-    if args.headless:
-        from Client import run_headless
-        run_headless(engine, generals)
-    elif args.t:
-        try:
-            from TerminalRenderer import TerminalRenderer
-            renderer = TerminalRenderer(engine, generals)
+        # 4. Lancement du Renderer choisi
+        result = None
+        
+        if args.headless:
+            from Client import run_headless
+            run_headless(engine, generals)
+            break # Pas de reset en headless
+            
+        elif args.t:
+            # Mode Terminal
+            try:
+                from TerminalRenderer import TerminalRenderer
+                renderer = TerminalRenderer(engine, generals)
+                result = renderer.run() # C'est ici qu'on appelle votre méthode run() !
+            except ImportError:
+                print("Erreur: curses manquant.")
+                break
+                
+        else:
+            # Mode PyGame
+            from PyGameRenderer import PygameRenderer
+            renderer = PygameRenderer(engine, generals)
             renderer.run()
-        except ImportError:
-            print("Erreur: Impossible de lancer le mode terminal (curses manquant ?)")
-    else:
-        from PyGameRenderer import PygameRenderer
-        renderer = PygameRenderer(engine, generals)
-        renderer.run()
+            # Pygame gère sa propre boucle, on sort après fermeture
+            break
+
+        # Si le renderer renvoie autre chose que 'reset', on quitte vraiment
+        if result != 'reset' and result != ('reset',):
+            break
+        
+        print("Relancement de la bataille...")
 
 if __name__ == "__main__":
     main()
