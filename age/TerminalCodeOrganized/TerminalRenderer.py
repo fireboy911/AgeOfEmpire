@@ -6,6 +6,8 @@ from Generals import General
 from typing import List, Dict
 import time
 from Engine import SimpleEngine
+from GameState import GameStateManager
+from DebugInfo import DebugInfoGenerator
 try:
     import curses
     from curses import wrapper
@@ -27,6 +29,10 @@ class TerminalRenderer:
         self.paused = False
         self.selected_idx = 0
         self.last_time = time.time()
+        
+        # Game state management
+        self.state_manager = GameStateManager()
+        self.debug_generator = DebugInfoGenerator()
 
     def unit_char(self, u: Unit) -> str:
         if u.unit_type.lower().startswith('pik'):
@@ -85,7 +91,8 @@ class TerminalRenderer:
         txt = f"Tick: {self.engine.tick:.2f} Units: {len(self.engine.units)} Speed x{self.speed_multiplier:.2f} {'PAUSED' if self.paused else ''}"
         try:
             stdscr.addstr(view_h+2, 1, txt)
-            stdscr.addstr(view_h+3, 1, "Controls: arrows/WASD pan - Tab select - t target - p pause - +/- speed - q quit - r reset")
+            stdscr.addstr(view_h+3, 1, "ZQSD/Arrows:Move Shift+Move:Fast Tab:Debug P:Pause +/-:Speed F9:Switch F11:Save F12:Load")
+            stdscr.addstr(view_h+4, 1, "t:Target r:Reset q:Quit")
         except curses.error:
             pass
         stdscr.refresh()
@@ -94,21 +101,36 @@ class TerminalRenderer:
         ch = stdscr.getch()
         if ch == -1:
             return True
-        # map keys
+        
+        # Check for Shift modifier (not directly available in curses, so use fast scroll with capital letters)
+        fast_scroll = 3.0
+        
+        # Q - Quit
         if ch in (ord('q'), ord('Q')):
             return False
-        if ch in (ord('p'), ord(' ')):
+        
+        # P or Space - Pause
+        if ch in (ord('p'), ord('P'), ord(' ')):
             self.paused = not self.paused
+        
+        # +/= - Increase speed
         if ch in (ord('+'), ord('=')):
-            self.speed_multiplier *= 2.0
+            self.speed_multiplier = min(self.speed_multiplier * 2.0, 16.0)
+        
+        # - - Decrease speed
         if ch in (ord('-'), ord('_')):
-            self.speed_multiplier = max(0.125, self.speed_multiplier/2.0)
-        if ch in (9,):  # Tab
-            my_units = self.engine.get_units_for_player(1)
-            if my_units:
-                self.selected_idx = (self.selected_idx + 1) % len(my_units)
+            self.speed_multiplier = max(self.speed_multiplier / 2.0, 0.125)
+        
+        # Tab - Debug info (now generates HTML)
+        if ch == 9:  # Tab key
+            try:
+                filepath = self.debug_generator.generate_html(self.engine, self.generals)
+                # Can't easily show message in curses, will show in console
+            except Exception as e:
+                pass
+        
+        # T - Target nearest enemy (for selected unit)
         if ch in (ord('t'), ord('T')):
-            # set selected unit's target to nearest enemy
             my_units = self.engine.get_units_for_player(1)
             if my_units and self.selected_idx < len(my_units):
                 su = my_units[self.selected_idx]
@@ -116,17 +138,53 @@ class TerminalRenderer:
                 if enemies:
                     nearest = min(enemies, key=lambda e: su.distance_to(e))
                     su.target_id = nearest.id
+        
+        # R - Reset
         if ch in (ord('r'), ord('R')):
             return 'reset'
-        # panning
-        if ch in (curses.KEY_LEFT, ord('a'), ord('A')):
-            self.cam_x = clamp(self.cam_x - camera_speed*dt, 0, max(0, self.engine.w - 1))
+        
+        # F9 - Switch to PyGame view
+        if ch == curses.KEY_F9:
+            return 'switch_pygame'
+        
+        # F11 - Quick Save
+        if ch == curses.KEY_F11:
+            try:
+                if self.state_manager.quick_save(self.engine, self.generals):
+                    pass  # Saved successfully
+            except Exception as e:
+                pass
+        
+        # F12 - Quick Load
+        if ch == curses.KEY_F12:
+            try:
+                state = self.state_manager.quick_load()
+                if state:
+                    self.state_manager.restore_engine(state, self.engine)
+                    self.generals = self.state_manager.restore_generals(state)
+            except Exception as e:
+                pass
+        
+        # Camera panning - ZQSD + Arrow keys
+        # Capital letters for fast scroll
+        move_speed = camera_speed * dt
+        
+        if ch in (curses.KEY_LEFT, ord('a'), ord('A'), ord('q')):
+            speed = move_speed * (fast_scroll if ch == ord('A') or ch == ord('Q') else 1.0)
+            self.cam_x = clamp(self.cam_x - speed, 0, max(0, self.engine.w - 1))
+        
         if ch in (curses.KEY_RIGHT, ord('d'), ord('D')):
-            self.cam_x = clamp(self.cam_x + camera_speed*dt, 0, max(0, self.engine.w - 1))
-        if ch in (curses.KEY_UP, ord('w'), ord('W')):
-            self.cam_y = clamp(self.cam_y - camera_speed*dt, 0, max(0, self.engine.h - 1))
+            speed = move_speed * (fast_scroll if ch == ord('D') else 1.0)
+            self.cam_x = clamp(self.cam_x + speed, 0, max(0, self.engine.w - 1))
+        
+        if ch in (curses.KEY_UP, ord('w'), ord('W'), ord('z'), ord('Z')):
+            speed = move_speed * (fast_scroll if ch in (ord('W'), ord('Z')) else 1.0)
+            self.cam_y = clamp(self.cam_y - speed, 0, max(0, self.engine.h - 1))
+        
         if ch in (curses.KEY_DOWN, ord('s'), ord('S')):
-            self.cam_y = clamp(self.cam_y + camera_speed*dt, 0, max(0, self.engine.h - 1))
+            speed = move_speed * (fast_scroll if ch == ord('S') else 1.0)
+            self.cam_y = clamp(self.cam_y + speed, 0, max(0, self.engine.h - 1))
+        
         return True
 
     def run_curses(self, stdscr):
@@ -142,6 +200,8 @@ class TerminalRenderer:
             inp = self.handle_input(stdscr, dt)
             if inp == 'reset':
                 return 'reset'
+            if inp == 'switch_pygame':
+                return 'switch_pygame'
             if inp is False:
                 break
             if not self.paused:
@@ -152,5 +212,4 @@ class TerminalRenderer:
         return 'quit'
 
     def run(self):
-
         return wrapper(self.run_curses)
