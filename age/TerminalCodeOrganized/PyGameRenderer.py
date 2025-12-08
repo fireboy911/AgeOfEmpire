@@ -51,6 +51,11 @@ class PygameRenderer:
         # Pause menu
         self.show_pause_menu = False
         
+        # Game end state
+        self.game_over = False
+        self.winner = None
+        self.game_over_tick = None
+        
         # Load textures
         self.load_textures()
 
@@ -135,6 +140,9 @@ class PygameRenderer:
         return sx, sy
 
     def draw(self):
+        # Check for game over condition
+        self.check_game_over()
+        
         t = self.tile_size()
 
         # Always fill screen first to avoid black borders when zoomed out
@@ -194,8 +202,11 @@ class PygameRenderer:
         # Draw HUD
         self.draw_hud()
         
+        # Draw game over screen if game is over
+        if self.game_over:
+            self.draw_game_over_screen()
         # Draw pause menu if active
-        if self.show_pause_menu:
+        elif self.show_pause_menu:
             self.draw_pause_menu()
         
         pygame.display.flip()
@@ -256,6 +267,49 @@ class PygameRenderer:
                 mm_surf.fill(c, (ux, uy, 2,2))
             
             self.screen.blit(mm_surf, (SCREEN_W - mm_w - 8, 8))
+    
+    def check_game_over(self):
+        """Check if game is over (one team eliminated)"""
+        if self.game_over:
+            return
+        
+        p1_alive = len(self.engine.get_units_for_player(1))
+        p2_alive = len(self.engine.get_units_for_player(2))
+        
+        if p1_alive == 0 and p2_alive > 0:
+            self.game_over = True
+            self.winner = 2
+            self.game_over_tick = self.engine.tick
+        elif p2_alive == 0 and p1_alive > 0:
+            self.game_over = True
+            self.winner = 1
+            self.game_over_tick = self.engine.tick
+    
+    def draw_game_over_screen(self):
+        """Draw game over overlay with winner"""
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H))
+        overlay.set_alpha(200)
+        overlay.fill((0,0,0))
+        self.screen.blit(overlay, (0,0))
+        
+        font_title = pygame.font.SysFont(None, 80)
+        font_text = pygame.font.SysFont(None, 40)
+        
+        title = font_title.render("GAME OVER", True, (255,255,0))
+        title_rect = title.get_rect(center=(SCREEN_W//2, SCREEN_H//2 - 100))
+        self.screen.blit(title, title_rect)
+        
+        if self.winner == 1:
+            winner_text = font_text.render("PLAYER 1 (RED) WINS!", True, (255,100,100))
+        else:
+            winner_text = font_text.render("PLAYER 2 (BLUE) WINS!", True, (100,150,255))
+        
+        winner_rect = winner_text.get_rect(center=(SCREEN_W//2, SCREEN_H//2))
+        self.screen.blit(winner_text, winner_rect)
+        
+        info_text = font_text.render("Press ESC to continue", True, (200,200,200))
+        info_rect = info_text.get_rect(center=(SCREEN_W//2, SCREEN_H//2 + 100))
+        self.screen.blit(info_text, info_rect)
     
     def draw_pause_menu(self):
         """Draw the ESC pause menu overlay"""
@@ -343,10 +397,13 @@ class PygameRenderer:
                     running = False
                     
                 elif event.type == pygame.KEYDOWN:
-                    # ESC - Toggle pause menu
+                    # ESC - Toggle pause menu or exit if game over
                     if event.key == pygame.K_ESCAPE:
-                        self.show_pause_menu = not self.show_pause_menu
-                        self.paused = self.show_pause_menu
+                        if self.game_over:
+                            running = False
+                        else:
+                            self.show_pause_menu = not self.show_pause_menu
+                            self.paused = self.show_pause_menu
                     
                     # Q - Quit
                     elif event.key == pygame.K_q and self.show_pause_menu:
@@ -462,8 +519,8 @@ class PygameRenderer:
             # Handle continuous input
             self.handle_input()
             
-            # Update simulation if not paused
-            if not self.paused:
+            # Update simulation if not paused and game is not over
+            if not self.paused and not self.game_over:
                 sim_dt = dt_real * self.speed_multiplier
                 sim_dt = min(sim_dt, 0.5)
                 self.engine.step(sim_dt, self.generals)
