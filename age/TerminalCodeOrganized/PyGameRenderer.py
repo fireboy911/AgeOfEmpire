@@ -34,6 +34,11 @@ class PygameRenderer:
         self.paused = False
         self.show_minimap = True
         
+        # Zoom
+        self.zoom = 1.0
+        self.min_zoom = 0.5
+        self.max_zoom = 3.0
+        
         # UI toggles (F1-F4)
         self.show_army_info = True
         self.show_health_bars = True
@@ -49,27 +54,22 @@ class PygameRenderer:
         # Load textures
         self.load_textures()
 
+    def tile_size(self) -> int:
+        return max(4, int(TILE_SIZE * self.zoom))
+
     def load_textures(self):
         """Load all terrain and unit textures"""
         assets_path = os.path.join(os.path.dirname(__file__), 'assets')
         
-        # Load single grass background texture
-        self.grass_texture = None
+        # Load single grass and stretch over the whole map (no tiling)
+        self.grass_bg = None
+        self.grass_bg_size = (MAP_W * TILE_SIZE, MAP_H * TILE_SIZE)
         try:
-            grass1 = pygame.image.load(os.path.join(assets_path, 'terrain', 'grass1.png'))
-            # Get original size
-            original_w, original_h = grass1.get_size()
-            # Create a large tiled background (bigger than any screen)
-            bg_size = max(SCREEN_W, SCREEN_H, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE) * 2
-            self.grass_texture = pygame.Surface((bg_size, bg_size))
-            
-            # Tile the grass texture across the surface
-            for x in range(0, bg_size, original_w):
-                for y in range(0, bg_size, original_h):
-                    self.grass_texture.blit(grass1, (x, y))
+            grass1 = pygame.image.load(os.path.join(assets_path, 'terrain', 'grass1.png')).convert()
+            self.grass_bg = pygame.transform.smoothscale(grass1, self.grass_bg_size)
         except Exception as e:
             print(f"Warning: Could not load terrain texture: {e}")
-            self.grass_texture = None
+            self.grass_bg = None
         
         # Load unit textures: {(unit_type, player, direction): surface}
         self.unit_textures = {}
@@ -129,33 +129,34 @@ class PygameRenderer:
             return 'down' if dy > 0 else 'up'
 
     def world_to_screen(self, wx, wy) -> Tuple[int,int]:
-        sx = int((wx - self.cam_x) * TILE_SIZE)
-        sy = int((wy - self.cam_y) * TILE_SIZE)
+        t = self.tile_size()
+        sx = int((wx - self.cam_x) * t)
+        sy = int((wy - self.cam_y) * t)
         return sx, sy
 
     def draw(self):
-        # Draw grass background as a single continuous image
-        if self.grass_texture:
-            # Calculate offset based on camera position for seamless scrolling
-            offset_x = int(self.cam_x * TILE_SIZE) % self.grass_texture.get_width()
-            offset_y = int(self.cam_y * TILE_SIZE) % self.grass_texture.get_height()
-            
-            # Blit the grass texture with proper offset
-            self.screen.blit(self.grass_texture, (-offset_x, -offset_y))
-            
-            # Fill any remaining areas for seamless wrapping
-            if offset_x > 0:
-                self.screen.blit(self.grass_texture, (self.grass_texture.get_width() - offset_x, -offset_y))
-            if offset_y > 0:
-                self.screen.blit(self.grass_texture, (-offset_x, self.grass_texture.get_height() - offset_y))
-            if offset_x > 0 and offset_y > 0:
-                self.screen.blit(self.grass_texture, (self.grass_texture.get_width() - offset_x, self.grass_texture.get_height() - offset_y))
-        else:
-            # Fallback to solid green
-            self.screen.fill((34, 139, 34))
+        t = self.tile_size()
+
+        # Always fill screen first to avoid black borders when zoomed out
+        self.screen.fill((34, 139, 34))
+
+        # Draw single stretched background (no tiling), large enough to cover view
+        if self.grass_bg:
+            bg_w = int(self.grass_bg_size[0] * self.zoom)
+            bg_h = int(self.grass_bg_size[1] * self.zoom)
+
+            # Ensure background at least covers screen at current zoom
+            bg_w = max(bg_w, SCREEN_W)
+            bg_h = max(bg_h, SCREEN_H)
+
+            scaled_bg = pygame.transform.smoothscale(self.grass_bg, (bg_w, bg_h))
+            offset_x = -int(self.cam_x * t)
+            offset_y = -int(self.cam_y * t)
+            self.screen.blit(scaled_bg, (offset_x, offset_y))
         
         # Draw units
         for u in self.engine.units:
+            t = self.tile_size()
             sx, sy = self.world_to_screen(u.x, u.y)
             
             # Get unit type (normalize name)
@@ -175,18 +176,19 @@ class PygameRenderer:
             # Try to use texture, fallback to circle
             texture_key = (unit_type, u.player, direction)
             if texture_key in self.unit_textures:
-                self.screen.blit(self.unit_textures[texture_key], (sx, sy))
+                sprite = pygame.transform.scale(self.unit_textures[texture_key], (t, t))
+                self.screen.blit(sprite, (sx, sy))
             else:
-                # Fallback to colored circle
                 col = u.color
-                r = int(TILE_SIZE*0.4)
-                pygame.draw.circle(self.screen, col, (sx+TILE_SIZE//2, sy+TILE_SIZE//2), r)
+                r = int(t * 0.4)
+                self.screen.blit(pygame.Surface((t, t), pygame.SRCALPHA), (sx, sy))
+                pygame.draw.circle(self.screen, col, (sx + t//2, sy + t//2), r)
             
             # Draw HP bar
             if self.show_health_bars:
                 hp_frac = clamp(u.hp / 55.0, 0.0, 1.0)
-                bar_w = int(TILE_SIZE * hp_frac)
-                pygame.draw.rect(self.screen, (0,0,0), (sx, sy-6, TILE_SIZE, 4))
+                bar_w = int(t * hp_frac)
+                pygame.draw.rect(self.screen, (0,0,0), (sx, sy-6, t, 4))
                 pygame.draw.rect(self.screen, (0,255,0), (sx, sy-6, bar_w, 4))
         
         # Draw HUD
@@ -239,8 +241,9 @@ class PygameRenderer:
             scale_y = mm_h / self.engine.h
             
             # Draw camera viewport on minimap
-            cam_w = (SCREEN_W // TILE_SIZE) * scale_x
-            cam_h = (SCREEN_H // TILE_SIZE) * scale_y
+            t = self.tile_size()
+            cam_w = (SCREEN_W / t) * scale_x
+            cam_h = (SCREEN_H / t) * scale_y
             cam_x_mm = self.cam_x * scale_x
             cam_y_mm = self.cam_y * scale_y
             pygame.draw.rect(mm_surf, (100,100,100), (cam_x_mm, cam_y_mm, cam_w, cam_h), 2)
@@ -300,7 +303,7 @@ class PygameRenderer:
         
         # Fast scroll with Shift
         speed_mult = 3.0 if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] else 1.0
-        move_speed = camera_speed * dt * speed_mult
+        move_speed = camera_speed * dt * speed_mult / max(0.5, self.zoom)
         
         # ZQSD + Arrow keys for movement
         if keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_q]: 
@@ -312,9 +315,12 @@ class PygameRenderer:
         if keys[pygame.K_DOWN] or keys[pygame.K_s]: 
             self.cam_y += move_speed
         
-        # Clamp camera to map bounds
-        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - SCREEN_W//TILE_SIZE))
-        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - SCREEN_H//TILE_SIZE))
+        # Clamp camera to map bounds (in world units)
+        t = self.tile_size()
+        view_w = SCREEN_W / t
+        view_h = SCREEN_H / t
+        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - view_w))
+        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - view_h))
         
         # Space for fast-forward
         if keys[pygame.K_SPACE]:
@@ -404,6 +410,28 @@ class PygameRenderer:
                     # - - Decrease speed
                     elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
                         self.speed_multiplier = max(self.speed_multiplier / 2.0, 0.125)
+
+                    # Zoom in
+                    elif event.key == pygame.K_PAGEUP:
+                        self.zoom = min(self.max_zoom, self.zoom + 0.1)
+                    # Zoom out
+                    elif event.key == pygame.K_PAGEDOWN:
+                        self.zoom = max(self.min_zoom, self.zoom - 0.1)
+                    # Center on fight (bounding box of alive units)
+                    elif event.key == pygame.K_f:
+                        alive = [u for u in self.engine.units if u.alive]
+                        if alive:
+                            min_x = min(u.x for u in alive)
+                            max_x = max(u.x for u in alive)
+                            min_y = min(u.y for u in alive)
+                            max_y = max(u.y for u in alive)
+                            cx = (min_x + max_x) / 2
+                            cy = (min_y + max_y) / 2
+                            tsize = self.tile_size()
+                            view_w = SCREEN_W / tsize
+                            view_h = SCREEN_H / tsize
+                            self.cam_x = clamp(cx - view_w/2, 0, max(0, self.engine.w - view_w))
+                            self.cam_y = clamp(cy - view_h/2, 0, max(0, self.engine.h - view_h))
                 
                 # Mouse click on minimap
                 elif event.type == pygame.MOUSEBUTTONDOWN and self.show_minimap:
@@ -416,10 +444,20 @@ class PygameRenderer:
                         # Click on minimap - move camera
                         rel_x = (mouse_x - mm_x) / mm_w
                         rel_y = (mouse_y - mm_y) / mm_h
-                        self.cam_x = rel_x * self.engine.w - (SCREEN_W // TILE_SIZE) // 2
-                        self.cam_y = rel_y * self.engine.h - (SCREEN_H // TILE_SIZE) // 2
-                        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - SCREEN_W//TILE_SIZE))
-                        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - SCREEN_H//TILE_SIZE))
+                        t = self.tile_size()
+                        view_w = SCREEN_W / t
+                        view_h = SCREEN_H / t
+                        self.cam_x = rel_x * self.engine.w - view_w / 2
+                        self.cam_y = rel_y * self.engine.h - view_h / 2
+                        self.cam_x = clamp(self.cam_x, 0, max(0, self.engine.w - view_w))
+                        self.cam_y = clamp(self.cam_y, 0, max(0, self.engine.h - view_h))
+
+                # Mouse wheel zoom
+                elif event.type == pygame.MOUSEWHEEL:
+                    if event.y > 0:
+                        self.zoom = min(self.max_zoom, self.zoom + 0.1)
+                    elif event.y < 0:
+                        self.zoom = max(self.min_zoom, self.zoom - 0.1)
             
             # Handle continuous input
             self.handle_input()
