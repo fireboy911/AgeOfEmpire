@@ -35,18 +35,22 @@ class Unit:
         if not self.alive:
             return
 
+        # passive regen
         if self.regen > 0:
             self.hp = min(self.hp + self.regen * dt, 55)
 
-        # Monk healing behavior
+        # -------------- Monk logic --------------
         if self.unit_type == "Monk":
             heal_range = self.range
             heal_power = self.attack * dt * 2
+
             allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < 55]
             if not allies:
                 return
+
             target = min(allies, key=lambda a: self.distance_to(a))
             dist = self.distance_to(target)
+
             if dist <= heal_range:
                 target.hp = min(target.hp + heal_power, 55)
             else:
@@ -58,9 +62,9 @@ class Unit:
                     ny = dy / dist
                     self.x += nx * self.speed * dt
                     self.y += ny * self.speed * dt
-            return
+            return   # monks don't attack
 
-        # normal combat logic
+        # -------------- Normal combat logic --------------
         target = None
         if self.target_id is not None:
             target = engine.units_by_id.get(self.target_id)
@@ -69,30 +73,40 @@ class Unit:
             self.target_id = None
             return
 
+        # compute distance
         d = self.distance_to(target)
+
         if d <= self.range + 0.1:
+
+            # ---- Primary damage ----
             damage = self.attack * dt
             target.hp -= damage
             if target.hp <= 0:
                 target.alive = False
                 target.hp = 0
                 engine.mark_dead(target)
-        else:
-            # Calcule la distance que l'unité doit parcourir pour être à portée
-            distance_to_move = d - self.range 
-            
-            # S'assurer que l'unité n'avance pas au-delà de sa vitesse max
-            # et qu'elle ne se déplace pas trop loin (juste assez pour atteindre la portée)
-            move_distance = min(self.speed * dt, distance_to_move)
 
-            if move_distance > 1e-6:
-                dx = target.x - self.x
-                dy = target.y - self.y
-                dist = math.hypot(dx, dy)
-                
-                if dist > 1e-6:
-                    nx = dx / dist
-                    ny = dy / dist
-                    self.x += nx * move_distance
-                    self.y += ny * move_distance
-                
+            # ---- AoE splash ----
+            AOE_RADIUS = 3.0
+            SPLASH = damage * 0.5
+
+            for other in engine.units:
+                if other.alive and other.player != self.player and other.id != target.id:
+                    if self.distance_to(other) <= AOE_RADIUS:
+                        other.hp -= SPLASH
+                        if other.hp <= 0:
+                            other.alive = False
+                            other.hp = 0
+                            engine.mark_dead(other)
+
+        else:
+            # ---- Move toward target ----
+            dx = target.x - self.x
+            dy = target.y - self.y
+            dist = math.hypot(dx, dy)
+            if dist > 1e-6:
+                nx = dx / dist
+                ny = dy / dist
+                self.x += nx * self.speed * dt
+                self.y += ny * self.speed * dt
+
