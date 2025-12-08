@@ -191,7 +191,7 @@ class DebugInfoGenerator:
         
         for u in sorted(engine.units, key=lambda x: (x.player, x.id)):
             player_class = f"player{u.player}"
-            hp_percent = (u.hp / 55.0) * 100 if u.hp > 0 else 0
+            hp_percent = (u.hp / u.max_hp) * 100 if u.hp > 0 else 0
             status_class = "status-alive" if u.alive else "status-dead"
             status = "Alive" if u.alive else "Dead"
             target_info = f"Unit #{u.target_id}" if u.target_id else "None"
@@ -206,7 +206,7 @@ class DebugInfoGenerator:
                 <div class="hp-bar">
                     <div class="hp-fill" style="width: {hp_percent}%"></div>
                 </div>
-                {u.hp:.1f} / 55
+                {u.hp:.1f} / {u.max_hp:.1f}
             </td>
             <td>{u.attack:.1f}</td>
             <td>{u.range:.1f}</td>
