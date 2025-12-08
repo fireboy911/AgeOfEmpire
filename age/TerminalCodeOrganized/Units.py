@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import List, Tuple, Optional, Dict
 import math
 @dataclass
 class Unit:
@@ -8,18 +8,22 @@ class Unit:
     x: float
     y: float
     hp: float = 0.0
+    max_hp: Optional[float] = None
     attack: float = 50.0
+    armor: float = 0.0
     range: float = 1.0
     speed: float = 1.0
     alive: bool = True
     target_id: Optional[int] = None
     regen: float = 0.0
-    unit_type: str = "Pikeman*"
+    unit_type: str = "Pikeman"
     color: Optional[Tuple[int,int,int]] = None  # unused by curses but kept
+    tags: List[str] = field(default_factory=list)
+    bonuses: Dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self):
         type_colors = {
-            "Pikeman*": (200, 50, 50),
+            "Pikeman": (200, 50, 50),
             "Crossbowman": (255, 200, 50),
             "knight": (180, 180, 180),
             "mage": (120, 50, 200),
@@ -27,6 +31,9 @@ class Unit:
         }
         if self.color is None:
             self.color = type_colors.get(self.unit_type, (255, 255, 255))
+
+        if self.max_hp is None:
+            self.max_hp = self.hp
 
     def distance_to(self, other: "Unit") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
@@ -36,19 +43,19 @@ class Unit:
             return
 
         if self.regen > 0:
-            self.hp = min(self.hp + self.regen * dt, 55)
+            self.hp = min(self.hp + self.regen * dt, self.max_hp)
 
         # Monk healing behavior
         if self.unit_type == "Monk":
             heal_range = self.range
-            heal_power = self.attack * dt * 2
-            allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < 55]
+            heal_power = self.regen * dt * 2
+            allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < a.max_hp]
             if not allies:
                 return
             target = min(allies, key=lambda a: self.distance_to(a))
             dist = self.distance_to(target)
             if dist <= heal_range:
-                target.hp = min(target.hp + heal_power, 55)
+                target.hp = min(target.hp + heal_power, target.max_hp)
             else:
                 dx = target.x - self.x
                 dy = target.y - self.y
@@ -71,28 +78,25 @@ class Unit:
 
         d = self.distance_to(target)
         if d <= self.range + 0.1:
-            damage = self.attack * dt
+            current_attack = self.attack
+            # On regarde chaque tag de la cible (ex: "Mounted")
+            for tag in target.tags:
+                # Si j'ai un bonus contre ce tag, je l'ajoute
+                if tag in self.bonuses:
+                    current_attack += self.bonuses[tag]
+            base_damage = max(0, current_attack - target.armor)
+            damage = base_damage * dt
             target.hp -= damage
             if target.hp <= 0:
                 target.alive = False
                 target.hp = 0
                 engine.mark_dead(target)
         else:
-            # Calcule la distance que l'unité doit parcourir pour être à portée
-            distance_to_move = d - self.range 
-            
-            # S'assurer que l'unité n'avance pas au-delà de sa vitesse max
-            # et qu'elle ne se déplace pas trop loin (juste assez pour atteindre la portée)
-            move_distance = min(self.speed * dt, distance_to_move)
-
-            if move_distance > 1e-6:
-                dx = target.x - self.x
-                dy = target.y - self.y
-                dist = math.hypot(dx, dy)
-                
-                if dist > 1e-6:
-                    nx = dx / dist
-                    ny = dy / dist
-                    self.x += nx * move_distance
-                    self.y += ny * move_distance
-                
+            dx = target.x - self.x
+            dy = target.y - self.y
+            dist = math.hypot(dx, dy)
+            if dist > 1e-6:
+                nx = dx / dist
+                ny = dy / dist
+                self.x += nx * self.speed * dt
+                self.y += ny * self.speed * dt
