@@ -4,10 +4,10 @@ def spawn_asymmetric_armies(engine: "SimpleEngine", left_offset=10, right_offset
     mid_y = engine.h / 2
 
     type_stats = {
-        "Pikeman": {"hp": 55, "attack": 6, "range": 1.0, "speed": 1.0},
-        "Crossbowman":{"hp": 40, "attack": 12, "range": 10.0, "speed": 1.0},
-        "knight": {"hp": 70, "attack": 8, "range": 1.2, "speed": 1.5},
-        "Monk": {"hp": 55, "attack": 1.5, "range": 5.0, "speed": 1.0, "regen": 2.0},
+        "Pikeman": {"hp": 55, "attack": 4, "range": 1.0, "speed": 1.0, "tags": ["infantry"], "bonuses": {"Cavalry": 22.0}},
+        "Crossbowman":{"hp": 35, "attack": 5, "range": 5.0, "speed": 0.96, "tags": ["archer"]},
+        "knight": {"hp": 100, "attack": 10, "armor": 2, "range": 1.0, "speed": 1.35, "tags": ["Cavalry"]},
+        "Monk": {"hp": 30, "attack": 0.0, "range": 9.0, "speed": 0.7, "regen": 2.5, "tags": ["Monk"]},
     }
 
     type_colors = {
