@@ -15,7 +15,9 @@ class Unit:
     speed: float = 1.0
     alive: bool = True
     target_id: Optional[int] = None
-    regen: float = 0.0
+    regen: float = 0.
+    reload_time: float = 1.0
+    reload_timer: float = 0.0
     unit_type: str = "Pikeman"
     color: Optional[Tuple[int,int,int]] = None  # unused by curses but kept
     tags: List[str] = field(default_factory=list)
@@ -42,20 +44,25 @@ class Unit:
         if not self.alive:
             return
 
+        # Gestion du timer de rechargement
+        if self.reload_timer > 0:
+            self.reload_timer -= dt
+
         if self.regen > 0:
             self.hp = min(self.hp + self.regen * dt, self.max_hp)
 
         # Monk healing behavior
         if self.unit_type == "Monk":
             heal_range = self.range
-            heal_power = self.regen * dt * 2
             allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < a.max_hp]
             if not allies:
                 return
             target = min(allies, key=lambda a: self.distance_to(a))
             dist = self.distance_to(target)
             if dist <= heal_range:
-                target.hp = min(target.hp + heal_power, target.max_hp)
+                if self.reload_timer <= 0:
+                    target.hp = min(target.hp + self.regen, target.max_hp)
+                    self.reload_timer = self.reload_time
             else:
                 dx = target.x - self.x
                 dy = target.y - self.y
@@ -78,19 +85,21 @@ class Unit:
 
         d = self.distance_to(target)
         if d <= self.range + 0.1:
-            current_attack = self.attack
-            # On regarde chaque tag de la cible (ex: "Mounted")
-            for tag in target.tags:
-                # Si j'ai un bonus contre ce tag, je l'ajoute
-                if tag in self.bonuses:
-                    current_attack += self.bonuses[tag]
-            base_damage = max(0, current_attack - target.armor)
-            damage = base_damage * dt
-            target.hp -= damage
-            if target.hp <= 0:
-                target.alive = False
-                target.hp = 0
-                engine.mark_dead(target)
+            if self.reload_timer <= 0:
+                current_attack = self.attack
+                # On regarde chaque tag de la cible (ex: "Mounted")
+                for tag in target.tags:
+                    # Si j'ai un bonus contre ce tag, je l'ajoute
+                    if tag in self.bonuses:
+                        current_attack += self.bonuses[tag]
+                base_damage = max(0, current_attack - target.armor)
+                damage = base_damage
+                target.hp -= damage
+                self.reload_timer = self.reload_time
+                if target.hp <= 0:
+                    target.alive = False
+                    target.hp = 0
+                    engine.mark_dead(target)
         else:
             dx = target.x - self.x
             dy = target.y - self.y
