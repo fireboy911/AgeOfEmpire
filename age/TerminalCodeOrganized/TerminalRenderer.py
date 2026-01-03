@@ -13,6 +13,8 @@ try:
     from curses import wrapper
 except Exception:
     curses = None
+import os
+os.environ.setdefault('ESCDELAY', '25')
 
 def clamp(v, a, b): return max(a, min(b, v))
 FPS = 20
@@ -92,7 +94,7 @@ class TerminalRenderer:
         try:
             stdscr.addstr(view_h+2, 1, txt)
             stdscr.addstr(view_h+3, 1, "ZQSD/Arrows:Move Shift+Move:Fast Tab:Debug P:Pause +/-:Speed F9:Switch F11:Save F12:Load")
-            stdscr.addstr(view_h+4, 1, "t:Target r:Reset q:Quit")
+            stdscr.addstr(view_h+4, 1, "t:Target r:Reset esc:Quit")
         except curses.error:
             pass
         stdscr.refresh()
@@ -105,8 +107,8 @@ class TerminalRenderer:
         # Check for Shift modifier (not directly available in curses, so use fast scroll with capital letters)
         fast_scroll = 3.0
         
-        # Q - Quit
-        if ch in (ord('q'), ord('Q')):
+        # esc - Quit
+        if ch == 27:
             return False
         
         # P or Space - Pause
@@ -169,7 +171,7 @@ class TerminalRenderer:
         # Capital letters for fast scroll
         move_speed = camera_speed * dt
         
-        if ch in (curses.KEY_LEFT, ord('a'), ord('A'), ord('q')):
+        if ch in (curses.KEY_LEFT, ord('a'), ord('A'), ord('q'), ord('Q')):
             speed = move_speed * (fast_scroll if ch == ord('A') or ch == ord('Q') else 1.0)
             self.cam_x = clamp(self.cam_x - speed, 0, max(0, self.engine.w - 1))
         
@@ -213,3 +215,4 @@ class TerminalRenderer:
 
     def run(self):
         return wrapper(self.run_curses)
+
