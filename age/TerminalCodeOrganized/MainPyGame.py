@@ -5,7 +5,7 @@ from Engine import SimpleEngine
 from Map import MAP_W, MAP_H
 from random import random
 from PyGameRenderer import PygameRenderer
-from Scenario import spawn_asymmetric_armies
+from Scenario import square_sceanario, chevron_scenario
 from Client import run_headless
 import random
 
@@ -17,7 +17,7 @@ def main():
     engine = SimpleEngine(w=MAP_W, h=MAP_H)
 
     # Spawn asymmetric armies (different formations for P1 and P2)
-    spawn_asymmetric_armies(engine, left_offset=10, right_offset=10)
+    square_scenario(engine)
 
     # Generals
     generals = {
@@ -66,7 +66,7 @@ def main():
                 elif result == 'reset' or result == ('reset',):
                     # Reset the game
                     engine = SimpleEngine(w=MAP_W, h=MAP_H)
-                    spawn_asymmetric_armies(engine, left_offset=10, right_offset=10)
+                    square_scenario(engine, left_offset=10, right_offset=10)
                     generals = {1: DaftGeneral(1), 2: BrainDeadGeneral(2)}
                     current_view = 'terminal'
                 else:
@@ -78,3 +78,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
