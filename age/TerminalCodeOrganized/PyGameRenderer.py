@@ -70,7 +70,7 @@ class PygameRenderer:
         self.grass_bg = None
         self.grass_bg_size = (MAP_W * TILE_SIZE, MAP_H * TILE_SIZE)
         try:
-            grass1 = pygame.image.load(os.path.join(assets_path, 'terrain', 'grass1.png')).convert()
+            grass1 = pygame.image.load(os.path.join(assets_path, 'terrain', 'background.png')).convert()
             self.grass_bg = pygame.transform.smoothscale(grass1, self.grass_bg_size)
         except Exception as e:
             print(f"Warning: Could not load terrain texture: {e}")
@@ -530,4 +530,5 @@ class PygameRenderer:
             self.draw()
         
         pygame.quit()
+
         return 'switch_terminal' if switch_to_terminal else None
