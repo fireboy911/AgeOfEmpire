@@ -34,12 +34,9 @@ def spawn_asymmetric_armies(engine: "SimpleEngine", left_offset=10, right_offset
         unit_type = "knight"
         engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
                           color=type_colors[1][unit_type], **type_stats[unit_type])
-    for row in range(3):
-       for i in range(-row, row+1, 2):
-        x = anchor_x - row * 4 * side_dir
-        y = mid_y + i
-        engine.spawn_unit(player=1, x=x, y=y, unit_type="Pikeman*", 
-                          color=type_colors[1]["Pikeman"], **type_stats["Pikeman"])
+    for i in range(5):
+        x = anchor_x - i * 2 * side_dir
+        y = mid_y + 2
         unit_type = "Pikeman"
         engine.spawn_unit(player=1, x=x, y=y, unit_type=unit_type,
                           color=type_colors[1][unit_type], **type_stats[unit_type])
@@ -82,4 +79,5 @@ def spawn_asymmetric_armies(engine: "SimpleEngine", left_offset=10, right_offset
         y = mid_y - 3 + i * 6
         unit_type = "Monk"
         engine.spawn_unit(player=2, x=x, y=y, unit_type=unit_type,
+
                           color=type_colors[2][unit_type], **type_stats[unit_type])
