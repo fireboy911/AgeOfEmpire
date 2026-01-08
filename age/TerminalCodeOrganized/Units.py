@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict
 import math
+
 @dataclass
 class Unit:
     id: int
@@ -19,9 +20,12 @@ class Unit:
     reload_time: float = 1.0
     reload_timer: float = 0.0
     unit_type: str = "Pikeman"
-    color: Optional[Tuple[int,int,int]] = None  # unused by curses but kept
+    color: Optional[Tuple[int,int,int]] = None
     tags: List[str] = field(default_factory=list)
     bonuses: Dict[str, float] = field(default_factory=dict)
+    
+    # Paramètre de collision (Rayon de l'unité)
+    radius: float = 0.4 
 
     def __post_init__(self):
         type_colors = {
@@ -40,72 +44,82 @@ class Unit:
     def distance_to(self, other: "Unit") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
 
+    def handle_collisions(self, engine: "SimpleEngine"):
+        """Empêche les unités de se chevaucher (Algorithme de séparation)."""
+        for other in engine.units:
+            if other.id == self.id or not other.alive:
+                continue
+            
+            dx = self.x - other.x
+            dy = self.y - other.y
+            dist = math.hypot(dx, dy)
+            min_dist = self.radius + other.radius
+
+            if dist < min_dist and dist > 0:
+                overlap = min_dist - dist
+                # On repousse l'unité de la moitié de l'interpénétration
+                self.x += (dx / dist) * overlap * 0.5
+                self.y += (dy / dist) * overlap * 0.5
+
     def step(self, dt: float, engine: "SimpleEngine"):
         if not self.alive:
             return
 
-        # Gestion du timer de rechargement
+        # 1. Gestion des collisions
+        self.handle_collisions(engine)
+
+        # 2. Gestion du rechargement et régénération
         if self.reload_timer > 0:
             self.reload_timer -= dt
 
         if self.regen > 0:
             self.hp = min(self.hp + self.regen * dt, self.max_hp)
 
-        # Monk healing behavior
+        # 3. Logique spécifique au Moine (Heal)
         if self.unit_type == "Monk":
-            heal_range = self.range
             allies = [a for a in engine.units if a.player == self.player and a.alive and a.hp < a.max_hp]
-            if not allies:
-                return
-            target = min(allies, key=lambda a: self.distance_to(a))
-            dist = self.distance_to(target)
-            if dist <= heal_range:
-                if self.reload_timer <= 0:
-                    target.hp = min(target.hp + self.regen, target.max_hp)
-                    self.reload_timer = self.reload_time
-            else:
-                dx = target.x - self.x
-                dy = target.y - self.y
-                dist = math.hypot(dx, dy)
-                if dist > 1e-6:
-                    nx = dx / dist
-                    ny = dy / dist
-                    self.x += nx * self.speed * dt
-                    self.y += ny * self.speed * dt
+            if allies:
+                target = min(allies, key=lambda a: self.distance_to(a))
+                dist = self.distance_to(target)
+                if dist <= self.range:
+                    if self.reload_timer <= 0:
+                        target.hp = min(target.hp + self.regen, target.max_hp)
+                        self.reload_timer = self.reload_time
+                else:
+                    self.move_towards(target, dt)
             return
 
-        # normal combat logic
-        target = None
-        if self.target_id is not None:
-            target = engine.units_by_id.get(self.target_id)
+        # 4. Logique de combat normale
+        target = engine.units_by_id.get(self.target_id) if self.target_id is not None else None
 
         if target is None or not target.alive:
             self.target_id = None
             return
 
         d = self.distance_to(target)
-        if d <= self.range + 0.1:
+        if d <= self.range + 0.2: # Marge pour les unités au corps à corps
             if self.reload_timer <= 0:
-                current_attack = self.attack
-                # On regarde chaque tag de la cible (ex: "Mounted")
+                # FORMULE AOE2 : Max(1, Somme des dégâts - Armure)
+                total_attack = self.attack
                 for tag in target.tags:
-                    # Si j'ai un bonus contre ce tag, je l'ajoute
-                    if tag in self.bonuses:
-                        current_attack += self.bonuses[tag]
-                base_damage = max(0, current_attack - target.armor)
-                damage = base_damage
+                    total_attack += self.bonuses.get(tag, 0.0)
+                
+                damage = max(1.0, total_attack - target.armor)
+                
                 target.hp -= damage
                 self.reload_timer = self.reload_time
+                
                 if target.hp <= 0:
                     target.alive = False
                     target.hp = 0
                     engine.mark_dead(target)
         else:
-            dx = target.x - self.x
-            dy = target.y - self.y
-            dist = math.hypot(dx, dy)
-            if dist > 1e-6:
-                nx = dx / dist
-                ny = dy / dist
-                self.x += nx * self.speed * dt
-                self.y += ny * self.speed * dt
+            self.move_towards(target, dt)
+
+    def move_towards(self, target: "Unit", dt: float):
+        dx = target.x - self.x
+        dy = target.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 1e-6:
+            self.x += (dx / dist) * self.speed * dt
+            self.y += (dy / dist) * self.speed * dt
