@@ -5,7 +5,7 @@ from Engine import SimpleEngine
 from Map import MAP_W, MAP_H
 from random import random
 from PyGameRenderer import PygameRenderer
-from Scenario import square_sceanario, chevron_scenario
+from Scenario import square_scenario, chevron_scenario
 from Client import run_headless
 import random
 
@@ -78,4 +78,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
