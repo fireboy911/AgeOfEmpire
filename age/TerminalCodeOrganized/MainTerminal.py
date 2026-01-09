@@ -13,7 +13,7 @@ def main():
         random.seed(args.seed)
 
     engine = SimpleEngine(w=MAP_W, h=MAP_H)
-    square_scenario(engine, left_offset=10, right_offset=10)
+    square_scenario(engine)
 
     generals = {
         1: DaftGeneral(1),
@@ -37,7 +37,7 @@ def main():
             
             if action == 'reset' or action == ('reset',):
                 engine = SimpleEngine(w=MAP_W, h=MAP_H)
-                square_scenario(engine, left_offset=10, right_offset=10)
+                square_scenario(engine)
                 generals = {1: DaftGeneral(1), 2: BrainDeadGeneral(2)}
                 continue
             elif action == 'switch_pygame' or action == ('switch_pygame',):
@@ -69,4 +69,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
