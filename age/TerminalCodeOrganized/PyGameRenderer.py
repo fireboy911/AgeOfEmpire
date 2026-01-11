@@ -78,7 +78,7 @@ class PygameRenderer:
         
         # Load unit textures: {(unit_type, player, direction): surface}
         self.unit_textures = {}
-        unit_types = ['Pikeman', 'Crossbowman', 'Knight', 'Long_Swordman']
+        unit_types = ['Pikeman', 'Crossbowman', 'Knight', 'Monk']  # Removed Long_Swordman - no sprites
         colors = {1: 'red', 2: 'blue'}
         directions = ['up', 'down', 'left', 'right']
         
@@ -91,18 +91,7 @@ class PygameRenderer:
                         img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                         self.unit_textures[(unit_type, player, direction)] = img
                     except Exception as e:
-                        print(f"Warning: Could not load {unit_type}/{color}/{direction}: {e}")
-        
-        # Also handle Monk (if images exist)
-        for player, color in colors.items():
-            for direction in directions:
-                try:
-                    path = os.path.join(assets_path, 'units', 'Monk', color, f'{direction}.png')
-                    if os.path.exists(path):
-                        img = pygame.image.load(path)
-                        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                        self.unit_textures[('Monk', player, direction)] = img
-                except:
+                        pass  # Silently skip missing textures
                     pass
 
     def get_unit_direction(self, unit: Unit) -> str:
