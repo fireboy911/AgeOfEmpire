@@ -1,61 +1,160 @@
 from Engine import SimpleEngine
-from GameData import UNIT_STATS
+import math
 
-def create_lanchester_scenario(engine: SimpleEngine, unit_type: str, n: int, spacing: int = 20):
-    """
-    Scénario pour tester les lois de Lanchester (Requis PDF).
-    Player 1 : N unités
-    Player 2 : 2*N unités (Force supérieure)
-    """
-    if unit_type not in UNIT_STATS:
-        print(f"Attention: Type d'unité inconnu '{unit_type}', défaut sur Pikeman")
-        unit_type = "Pikeman"
+def square_scenario(engine: "SimpleEngine", offset=8):
+    mid_x = engine.w / 2
+    mid_y = engine.h / 2
 
-    mid_x, mid_y = engine.w / 2, engine.h / 2
-    
-    # Armée P1 (Gauche)
-    for i in range(n):
-        # Formation en ligne verticale
-        engine.spawn_unit(player=1, x=mid_x - spacing, y=mid_y - n//2 + i, unit_type=unit_type)
+    type_stats = {
+        "Pikeman": {"hp": 55, "attack": 4, "reload_time": 3.0, "range": 1.0, "speed": 1.0, "tags": ["infantry"], "bonuses": {"Cavalry": 22.0}},
+        "Crossbowman": {"hp": 35, "attack": 5, "reload_time": 2.0, "range": 5.0, "speed": 0.96, "tags": ["archer"]},
+        "knight": {"hp": 100, "attack": 10, "reload_time": 1.8, "armor": 2, "range": 1.0, "speed": 1.35, "tags": ["Cavalry"]},
+        "Monk": {"hp": 30, "attack": 0.0, "reload_time": 1.0, "range": 9.0, "speed": 0.7, "regen": 2.5, "tags": ["Monk"]},
+    }
 
-    # Armée P2 (Droite) - Deux fois plus nombreuse
-    for i in range(n * 2):
-        # Formation en ligne (plus serrée ou double ligne pour que ça rentre)
-        x_pos = mid_x + spacing + (i % 2) # Légère profondeur
-        y_pos = mid_y - n + i
-        engine.spawn_unit(player=2, x=x_pos, y=y_pos, unit_type=unit_type)
+    type_colors = {
+        1: {"Pikeman": (255, 100, 50), "Crossbowman": (255, 50, 50), "knight": (200, 0, 0), "Monk": (255, 150, 100)},
+        2: {"Pikeman": (50, 150, 255), "Crossbowman": (100, 200, 255), "knight": (0, 100, 255), "Monk": (150, 200, 255)}
+    }
+
+    army_composition = [
+        ("Pikeman", 35),    
+        ("knight", 25),
+        ("Crossbowman", 30),
+        ("Monk", 10),
+    ]
+
+    for player in [1, 2]:
+        side_dir = 1 if player == 1 else -1
+        anchor_x = mid_x - (offset * side_dir)
+        
+        current_row_x = anchor_x
+        
+        for unit_type, count in army_composition:
+            units_per_column = 10
+            for i in range(count):
+                column = i // units_per_column
+                row = i % units_per_column
+                
+                x = current_row_x - (column * 1.2 * side_dir)
+                y = (mid_y - (units_per_column / 2)) + row
+                
+                engine.spawn_unit(
+                    player=player, 
+                    x=x, 
+                    y=y, 
+                    unit_type=unit_type,
+                    color=type_colors[player][unit_type], 
+                    **type_stats[unit_type]
+                )
+            
+            columns_used = (count // units_per_column) + 1
+            current_row_x -= (columns_used * 1.5 * side_dir)
 
 
-def spawn_asymmetric_armies(engine: SimpleEngine, left_offset=15, right_offset=15):
-    """
-    Scénario de démonstration avec différentes unités.
-    """
-    mid_x, mid_y = engine.w / 2, engine.h / 2
+def chevron_scenario(engine: "SimpleEngine", offset=15):
+    mid_x = engine.w / 2
+    mid_y = engine.h / 2
 
-    # Configuration des couleurs spécifiques pour la démo (Optionnel, sinon géré par Unit)
-    # On laisse Unit gérer les couleurs par défaut via GameData maintenant.
+    type_stats = {
+        "Pikeman": {"hp": 55, "attack": 4, "reload_time": 3.0, "range": 1.0, "speed": 1.0, "tags": ["infantry"], "bonuses": {"Cavalry": 22.0}},
+        "Crossbowman": {"hp": 35, "attack": 5, "reload_time": 2.0, "range": 5.0, "speed": 0.96, "tags": ["archer"]},
+        "knight": {"hp": 100, "attack": 10, "reload_time": 1.8, "armor": 2, "range": 1.0, "speed": 1.35, "tags": ["Cavalry"]},
+        "Monk": {"hp": 30, "attack": 0.0, "reload_time": 1.0, "range": 9.0, "speed": 0.7, "regen": 2.5, "tags": ["Monk"]},
+    }
 
-    # --- JOUEUR 1 (Gauche) : Cavalerie lourde et Moines ---
-    # Formation de Chevaliers (Knight)
-    anchor_x = mid_x - left_offset
-    for i in range(3):
-        engine.spawn_unit(1, x=anchor_x, y=mid_y - 2 + (i*2), unit_type="Knight")
-    
-    # Soutien Piquiers (Pikeman)
-    for i in range(4):
-        engine.spawn_unit(1, x=anchor_x - 2, y=mid_y - 3 + (i*2), unit_type="Pikeman")
+    type_colors = {
+        1: {"Pikeman": (255, 100, 50), "Crossbowman": (255, 50, 50), "knight": (200, 0, 0), "Monk": (255, 150, 100)},
+        2: {"Pikeman": (50, 150, 255), "Crossbowman": (100, 200, 255), "knight": (0, 100, 255), "Monk": (150, 200, 255)}
+    }
 
-    # Moines (Monk) en arrière
-    engine.spawn_unit(1, x=anchor_x - 5, y=mid_y, unit_type="Monk")
+    army_layers = [
+        ("Pikeman", 40),     
+        ("knight", 30),      
+        ("Crossbowman", 20), 
+        ("Monk", 10),        
+    ]
 
+    for player in [1, 2]:
+        side_dir = 1 if player == 1 else -1
+        anchor_x = mid_x - (offset * side_dir)
+        
+        current_layer_depth = 0
+        
+        for unit_type, count in army_layers:
+            for i in range(count):
+                side = 1 if i % 2 == 0 else -1
+                pos_in_wing = i // 2
+                x_offset = (pos_in_wing * 0.8) + (current_layer_depth * 1.5)
+                
+                x = anchor_x - (x_offset * side_dir)
+                y = mid_y + (pos_in_wing * 0.7 * side)
+                
+                engine.spawn_unit(
+                    player=player, 
+                    x=x, 
+                    y=y, 
+                    unit_type=unit_type,
+                    color=type_colors[player][unit_type], 
+                    **type_stats[unit_type]
+                )
+                
+            current_layer_depth += 1
 
-    # --- JOUEUR 2 (Droite) : Armée à distance (Archers) et Piquiers ---
-    anchor_x = mid_x + right_offset
-    
-    # Ligne de front Piquiers (Pikeman) pour protéger les archers
-    for i in range(5):
-        engine.spawn_unit(2, x=anchor_x, y=mid_y - 4 + (i*2), unit_type="Pikeman")
+def optimal_scenario(engine: "SimpleEngine", offset=12):
+    mid_x = engine.w / 2
+    mid_y = engine.h / 2
 
-    # Ligne arrière Arbalétriers (Crossbowman)
-    for i in range(4):
-        engine.spawn_unit(2, x=anchor_x + 3, y=mid_y - 3 + (i*2), unit_type="Crossbowman")
+    type_stats = {
+        "Pikeman": {"hp": 55, "attack": 4, "reload_time": 3.0, "range": 1.0, "speed": 1.0, "tags": ["infantry"], "bonuses": {"Cavalry": 22.0}},
+        "Crossbowman": {"hp": 35, "attack": 5, "reload_time": 2.0, "range": 5.0, "speed": 0.96, "tags": ["archer"]},
+        "knight": {"hp": 100, "attack": 10, "reload_time": 1.8, "armor": 2, "range": 1.0, "speed": 1.35, "tags": ["Cavalry"]},
+        "Monk": {"hp": 30, "attack": 0.0, "reload_time": 1.0, "range": 9.0, "speed": 0.7, "regen": 2.5, "tags": ["Monk"]},
+    }
+
+    type_colors = {
+        1: {"Pikeman": (255, 100, 50), "Crossbowman": (255, 50, 50), "knight": (200, 0, 0), "Monk": (255, 150, 100)},
+        2: {"Pikeman": (50, 150, 255), "Crossbowman": (100, 200, 255), "knight": (0, 100, 255), "Monk": (150, 200, 255)}
+    }
+
+    for player in [1, 2]:
+        side_dir = 1 if player == 1 else -1
+        anchor_x = mid_x - (offset * side_dir)
+
+        for i in range(35):
+            col = i // 7
+            row = i % 7
+            x = anchor_x - (col * 1.1 * side_dir)
+            y = (mid_y - 3.5) + row
+            engine.spawn_unit(player=player, x=x, y=y, unit_type="Pikeman",
+                              color=type_colors[player]["Pikeman"], **type_stats["Pikeman"])
+
+        for i in range(30):
+            col = i // 6
+            row = i % 6
+            x = anchor_x - (4 * side_dir) - (col * 1.1 * side_dir)
+            y = (mid_y - 3) + row
+            engine.spawn_unit(player=player, x=x, y=y, unit_type="Crossbowman",
+                              color=type_colors[player]["Crossbowman"], **type_stats["Crossbowman"])
+
+        for i in range(10):
+            x = anchor_x - (7 * side_dir)
+            y = (mid_y - 5) + i
+            engine.spawn_unit(player=player, x=x, y=y, unit_type="Monk",
+                              color=type_colors[player]["Monk"], **type_stats["Monk"])
+
+        for i in range(12):
+            col = i // 4
+            row = i % 4
+            x = anchor_x - (2 * side_dir) - (col * 1.1 * side_dir)
+            y = mid_y - 12 + row
+            engine.spawn_unit(player=player, x=x, y=y, unit_type="knight",
+                              color=type_colors[player]["knight"], **type_stats["knight"])
+        for i in range(13):
+            col = i // 4
+            row = i % 4
+            x = anchor_x - (2 * side_dir) - (col * 1.1 * side_dir)
+            y = mid_y + 8 + row
+            engine.spawn_unit(player=player, x=x, y=y, unit_type="knight",
+                              color=type_colors[player]["knight"], **type_stats["knight"])
+
