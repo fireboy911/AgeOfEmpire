@@ -72,7 +72,7 @@ def chevron_scenario(engine: "SimpleEngine", offset=15):
         ("Pikeman", 40),     
         ("knight", 30),      
         ("Crossbowman", 20), 
-        ("Monk", 10),        
+        ("Monk", 0),        
     ]
 
     for player in [1, 2]:
