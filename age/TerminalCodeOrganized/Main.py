@@ -2,7 +2,7 @@ import argparse
 from Map import MAP_W, MAP_H
 from typing import List, Dict
 from Engine import SimpleEngine
-from Scenario import square_scenario, chevron_scenario
+from Scenario import square_scenario, chevron_scenario, optimal_scenario, echelon_scenario
 import random
 import curses
 import time
@@ -31,7 +31,9 @@ def get_scenario(scenario_name: str):
     """Get scenario function by name"""
     scenario_map = {
         'square_scenario': square_scenario,
-        'chevron_scenario': chevron_scenario
+        'chevron_scenario': chevron_scenario,
+        'optimal_scenario': optimal_scenario,
+        'echelon_scenario': echelon_scenario
     }
     return scenario_map.get(scenario_name, square_scenario)
 
@@ -85,7 +87,7 @@ def main():
 
     # run command
     run_parser = subparsers.add_parser('run', help='Run a battle scenario')
-    run_parser.add_argument('scenario', help='Scenario to run (square_scenario, chevron_scenario)')
+    run_parser.add_argument('scenario', help='Scenario to run (square_scenario, chevron_scenario, optimal_scenario, echelon_scenario)')
     run_parser.add_argument('AI1', nargs='?', default='DaftGeneral', help='First AI (default: DaftGeneral)')
     run_parser.add_argument('AI2', nargs='?', default='BrainDeadGeneral', help='Second AI (default: BrainDeadGeneral)')
     run_parser.add_argument('-t', action='store_true', help='Terminal/headless view (default: 2.5D PyGame)')
@@ -115,7 +117,7 @@ def main():
 
     # view command (interactive PyGame)
     view_parser = subparsers.add_parser('view', help='View battle with interactive 2.5D/PyGame renderer')
-    view_parser.add_argument('scenario', nargs='?', default='square_scenario', help='Scenario to view (square_scenario, chevron_scenario)')
+    view_parser.add_argument('scenario', nargs='?', default='square_scenario', help='Scenario to view (square_scenario, chevron_scenario, optimal_scenario, echelon_scenario)')
     view_parser.add_argument('AI1', nargs='?', default='DaftGeneral', help='First AI')
     view_parser.add_argument('AI2', nargs='?', default='BrainDeadGeneral', help='Second AI')
     view_parser.add_argument('--seed', type=int, help='Random seed')
