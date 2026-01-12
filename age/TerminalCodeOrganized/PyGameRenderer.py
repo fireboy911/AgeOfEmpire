@@ -183,7 +183,7 @@ class PygameRenderer:
             
             # Draw HP bar
             if self.show_health_bars:
-                hp_frac = clamp(u.hp / 55.0, 0.0, 1.0)
+                hp_frac = clamp(u.hp / u.max_hp, 0.0, 1.0)
                 bar_w = int(t * hp_frac)
                 pygame.draw.rect(self.screen, (0,0,0), (sx, sy-6, t, 4))
                 pygame.draw.rect(self.screen, (0,255,0), (sx, sy-6, bar_w, 4))

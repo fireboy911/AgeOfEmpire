@@ -182,9 +182,15 @@ def main():
             
             # Save data file if specified
             if args.d is not None:
+                winner = pygame_renderer.winner if 'pygame_renderer' in locals() and hasattr(pygame_renderer, 'winner') else None
                 with open(args.d, 'w') as f:
                     f.write(f'Battle data from {current_view} view\n')
                     f.write(f'Engine ticks: {engine.tick:.2f}\n')
+                    if winner:
+                        if winner == 1:
+                            f.write('Winner: PLAYER 1 (RED)\n')
+                        elif winner == 2:
+                            f.write('Winner: PLAYER 2 (BLUE)\n')
                     f.write('Events:\n')
                     for event in engine.events:
                         f.write(f'   {event}\n')
@@ -237,13 +243,21 @@ def main():
                         break
                     except Exception as e:
                         print(f"Error in terminal viewer: {e}")
+                        import traceback
+                        traceback.print_exc()
                         break
             
             # Save data file if specified
             if args.d is not None:
+                winner = renderer.winner if 'renderer' in locals() and hasattr(renderer, 'winner') else None
                 with open(args.d, 'w') as f:
                     f.write(f'Battle data from {current_view} view\n')
                     f.write(f'Engine ticks: {engine.tick:.2f}\n')
+                    if winner:
+                        if winner == 1:
+                            f.write('Winner: PLAYER 1 (RED)\n')
+                        elif winner == 2:
+                            f.write('Winner: PLAYER 2 (BLUE)\n')
                     f.write('Events:\n')
                     for event in engine.events:
                         f.write(f'   {event}\n')

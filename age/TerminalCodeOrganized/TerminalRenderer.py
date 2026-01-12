@@ -35,6 +35,11 @@ class TerminalRenderer:
         # Game state management
         self.state_manager = GameStateManager()
         self.debug_generator = DebugInfoGenerator()
+        
+        # Game over state
+        self.game_over = False
+        self.winner = None
+        self.game_over_tick = None
 
     def unit_char(self, u: Unit) -> str:
         if u.unit_type.lower().startswith('pik'):
@@ -48,17 +53,30 @@ class TerminalRenderer:
         return '?'
 
     def draw(self, stdscr):
-        stdscr.clear()
-        h, w = stdscr.getmaxyx()
+        try:
+            stdscr.clear()
+        except curses.error:
+            pass
+        
+        try:
+            h, w = stdscr.getmaxyx()
+        except curses.error:
+            return
+        
+        # Ensure we have at least minimum dimensions
+        if h < 8 or w < 30:
+            try:
+                stdscr.addstr(0, 0, "Terminal too small (min 8 rows, 30 cols)")
+            except curses.error:
+                pass
+            try:
+                stdscr.refresh()
+            except curses.error:
+                pass
+            return
+        
         view_w = max(10, w-2)
         view_h = max(6, h-6)
-
-        # draw grid background (simple dots)
-        for yy in range(view_h):
-            row = []
-            for xx in range(view_w):
-                row.append('')
-            stdscr.addstr(1+yy, 1, ''.join(row))
 
         # draw units
         for u in self.engine.units:
@@ -78,26 +96,53 @@ class TerminalRenderer:
                         attr |= curses.A_REVERSE
                         selected = True
                 try:
-                    stdscr.addch(1+uy, 1+ux, ch, attr)
+                    # Double-check bounds before drawing
+                    y_pos = 1 + uy
+                    x_pos = 1 + ux
+                    if 0 <= y_pos < h and 0 <= x_pos < w:
+                        stdscr.addch(y_pos, x_pos, ch, attr)
                 except curses.error:
                     pass
                 # draw tiny hp above if selected
                 if selected:
                     hp_text = f"{int(u.hp)}/{int(55)}"
                     try:
-                        stdscr.addstr(0, 1, hp_text)
+                        if 0 <= 0 < h and 1 < w and len(hp_text) <= w - 1:
+                            stdscr.addstr(0, 1, hp_text[:w-2])
                     except curses.error:
                         pass
 
-        # HUD
-        txt = f"Tick: {self.engine.tick:.2f} Units: {len(self.engine.units)} Speed x{self.speed_multiplier:.2f} {'PAUSED' if self.paused else ''}"
+        # HUD - draw with bounds checking
+        hud_line1 = f"Tick: {self.engine.tick:.2f} Units: {len(self.engine.units)} Speed x{self.speed_multiplier:.2f} {'PAUSED' if self.paused else ''}"
+        hud_line2 = "ZQSD/Arrows:Move Shift+Move:Fast Tab:Debug P:Pause +/-:Speed F9:Switch"
+        hud_line3 = "t:Target r:Reset esc:Quit"
+        
+        hud_y1 = view_h + 2
+        hud_y2 = view_h + 3
+        hud_y3 = view_h + 4
+        
         try:
-            stdscr.addstr(view_h+2, 1, txt)
-            stdscr.addstr(view_h+3, 1, "ZQSD/Arrows:Move Shift+Move:Fast Tab:Debug P:Pause +/-:Speed F9:Switch F11:Save F12:Load")
-            stdscr.addstr(view_h+4, 1, "t:Target r:Reset esc:Quit")
+            if hud_y1 < h:
+                stdscr.addstr(hud_y1, 1, hud_line1[:w-2])
         except curses.error:
             pass
-        stdscr.refresh()
+        
+        try:
+            if hud_y2 < h:
+                stdscr.addstr(hud_y2, 1, hud_line2[:w-2])
+        except curses.error:
+            pass
+        
+        try:
+            if hud_y3 < h:
+                stdscr.addstr(hud_y3, 1, hud_line3[:w-2])
+        except curses.error:
+            pass
+        
+        try:
+            stdscr.refresh()
+        except curses.error:
+            pass
 
     def handle_input(self, stdscr, dt):
         ch = stdscr.getch()
@@ -199,6 +244,18 @@ class TerminalRenderer:
             now = time.time()
             dt = now - last
             last = now
+            
+            # Check for game over
+            self.check_game_over()
+            
+            # If game is over, show winner and wait for input
+            if self.game_over:
+                self.draw_game_over(stdscr)
+                ch = stdscr.getch()
+                if ch != -1:  # Any key pressed
+                    break
+                continue
+            
             inp = self.handle_input(stdscr, dt)
             if inp == 'reset':
                 return 'reset'
@@ -212,6 +269,69 @@ class TerminalRenderer:
                 self.engine.step(sim_dt, self.generals)
             self.draw(stdscr)
         return 'quit'
+
+    def check_game_over(self):
+        """Check if game is over (one team eliminated)"""
+        if self.game_over:
+            return
+        
+        p1_alive = len(self.engine.get_units_for_player(1))
+        p2_alive = len(self.engine.get_units_for_player(2))
+        
+        if p1_alive == 0 and p2_alive > 0:
+            self.game_over = True
+            self.winner = 2
+            self.game_over_tick = self.engine.tick
+        elif p2_alive == 0 and p1_alive > 0:
+            self.game_over = True
+            self.winner = 1
+            self.game_over_tick = self.engine.tick
+
+    def draw_game_over(self, stdscr):
+        """Draw game over screen with winner"""
+        try:
+            stdscr.clear()
+        except curses.error:
+            pass
+        
+        try:
+            h, w = stdscr.getmaxyx()
+        except curses.error:
+            return
+        
+        # Center the message
+        game_over_msg = "GAME OVER"
+        if self.winner == 1:
+            winner_msg = "PLAYER 1 (RED) WINS!"
+        else:
+            winner_msg = "PLAYER 2 (BLUE) WINS!"
+        info_msg = "Press any key to continue"
+        
+        try:
+            mid_y = h // 2
+            mid_x = w // 2
+            
+            # Draw game over title
+            title_x = max(0, mid_x - len(game_over_msg) // 2)
+            if 0 <= mid_y - 2 < h:
+                stdscr.addstr(mid_y - 2, title_x, game_over_msg[:w-1])
+            
+            # Draw winner message
+            winner_x = max(0, mid_x - len(winner_msg) // 2)
+            if 0 <= mid_y < h:
+                stdscr.addstr(mid_y, winner_x, winner_msg[:w-1])
+            
+            # Draw info message
+            info_x = max(0, mid_x - len(info_msg) // 2)
+            if 0 <= mid_y + 2 < h:
+                stdscr.addstr(mid_y + 2, info_x, info_msg[:w-1])
+        except curses.error:
+            pass
+        
+        try:
+            stdscr.refresh()
+        except curses.error:
+            pass
 
     def run(self):
         return wrapper(self.run_curses)
