@@ -266,8 +266,70 @@ def main():
     # Handle load command
     elif args.command == 'load':
         print(f"Loading battle from {args.savefile}...")
-        # TODO: Implement save/load functionality
-        print("Load functionality not yet implemented")
+        try:
+            from GameState import GameStateManager
+            state_manager = GameStateManager()
+            
+            # Try to load the file
+            state = state_manager.quick_load(args.savefile)
+            
+            if state is None:
+                print(f"Error: Save file '{args.savefile}' not found in saves/ directory")
+            else:
+                # Create engine and restore state
+                engine = SimpleEngine(w=state['engine']['w'], h=state['engine']['h'])
+                state_manager.restore_engine(state, engine)
+                generals = state_manager.restore_generals(state)
+                
+                print(f"Battle loaded successfully! Engine tick: {engine.tick:.2f}")
+                print(f"Units: {len(engine.units)}")
+                print(f"Opening 2.5D map viewer...\n")
+                
+                # Launch with PyGame viewer
+                current_view = 'pygame'
+                while True:
+                    if current_view == 'pygame':
+                        try:
+                            import pygame
+                            from PyGameRenderer import PygameRenderer
+                            renderer = PygameRenderer(engine, generals)
+                            result = renderer.run()
+                            
+                            if result == 'switch_terminal':
+                                print('Switching to terminal view...')
+                                current_view = 'terminal'
+                                continue
+                            else:
+                                break
+                        except ImportError:
+                            print("PyGame not available. Install with: pip install pygame")
+                            break
+                        except Exception as e:
+                            print(f"Error running PyGame viewer: {e}")
+                            break
+                    
+                    elif current_view == 'terminal':
+                        try:
+                            from TerminalRenderer import TerminalRenderer
+                            renderer = TerminalRenderer(engine, generals)
+                            result = renderer.run()
+                            
+                            if result == 'switch_pygame':
+                                print('Switching back to 2.5D PyGame view...')
+                                current_view = 'pygame'
+                                continue
+                            else:
+                                break
+                        except ImportError:
+                            print("Terminal view not available")
+                            break
+                        except Exception as e:
+                            print(f"Error in terminal viewer: {e}")
+                            break
+        except Exception as e:
+            print(f"Error loading battle: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Handle tourney command
     elif args.command == 'tourney':
@@ -335,14 +397,146 @@ def main():
 
     # Handle plot command
     elif args.command == 'plot':
-        # Parse the range specification (e.g., "range (1,100)")
-        range_str = ' '.join(args.range_values) if args.range_values else ''
+        # The units and range_values get combined when parsed, we need to separate them
+        # Look for "range" keyword in the arguments
+        all_args = args.units + (args.range_values if args.range_values else [])
+        
+        # Find where "range" starts
+        range_start = -1
+        unit_list = []
+        for i, arg in enumerate(all_args):
+            if 'range' in arg.lower():
+                range_start = i
+                break
+            unit_list.append(arg)
+        
+        if range_start == -1:
+            range_str = ''
+            unit_list = all_args
+        else:
+            range_str = ' '.join(all_args[range_start:])
+        
         print(f"Plotting {args.AI} with {args.plotter} on scenario {args.scenario}")
-        print(f"Units: {', '.join(args.units)}")
+        print(f"Units: {', '.join(unit_list)}")
         if range_str:
             print(f"Range: {range_str}")
-        print(f"Rounds per test: {args.N}")
-        print("Plot functionality not yet implemented")
+        print(f"Rounds per test: {args.N}\n")
+        
+        try:
+            # Parse range from specification like "range (1,100)" or "range 1 100"
+            import re
+            
+            # Try different patterns
+            range_match = re.search(r'range\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)', range_str)
+            if not range_match:
+                # Try pattern without parentheses: "range 1 100"
+                range_match = re.search(r'range\s+(\d+)\s+(\d+)', range_str)
+            
+            if not range_match:
+                print("Error: Range must be specified as 'range(1,100)' or 'range (1, 100)'")
+                print(f"Got: {range_str}")
+            else:
+                start_val = int(range_match.group(1))
+                end_val = int(range_match.group(2))
+                
+                # Parse unit list from format like "[Knight,Crossbow]" or "Knight Crossbow"
+                unit_names = []
+                for unit_spec in unit_list:
+                    # Remove brackets if present
+                    unit_spec = unit_spec.strip('[]')
+                    # Split by comma if comma-separated
+                    units_in_spec = [u.strip() for u in unit_spec.split(',')]
+                    unit_names.extend(units_in_spec)
+                
+                print(f"Testing {len(unit_names)} unit(s) from {start_val} to {end_val} per unit")
+                print(f"Total test combinations: {(end_val - start_val + 1)}")
+                print()
+                
+                # Prepare results
+                results = []
+                test_count = 0
+                
+                # Test each count level
+                for count in range(start_val, end_val + 1):
+                    print(f"Testing with {count} units of each type...", end='', flush=True)
+                    win_count = 0
+                    
+                    # Run N rounds at this unit count
+                    for round_num in range(args.N):
+                        # Create engine and scenario
+                        engine = SimpleEngine(w=MAP_W, h=MAP_H)
+                        scenario_func = get_scenario(args.scenario)
+                        scenario_func(engine)
+                        
+                        # Modify unit counts in the scenario
+                        # Remove existing units and recreate with specified count
+                        engine.units.clear()
+                        engine.units_by_id.clear()
+                        engine.next_unit_id = 1
+                        
+                        # Add player 1 units
+                        for i in range(count):
+                            from Units import Unit
+                            for j, unit_name in enumerate(unit_names):
+                                u = Unit(id=engine.next_unit_id, player=1, x=10+i%5, y=10+j, unit_type=unit_name)
+                                engine.units.append(u)
+                                engine.units_by_id[u.id] = u
+                                engine.next_unit_id += 1
+                        
+                        # Add player 2 units (opponent)
+                        for i in range(count):
+                            for j, unit_name in enumerate(unit_names):
+                                u = Unit(id=engine.next_unit_id, player=2, x=MAP_W-10-i%5, y=MAP_H-10-j, unit_type=unit_name)
+                                engine.units.append(u)
+                                engine.units_by_id[u.id] = u
+                                engine.next_unit_id += 1
+                        
+                        # Run battle
+                        t = 0.0
+                        dt = 0.2
+                        max_ticks = 180.0
+                        AI_class = get_ai_class(args.AI)
+                        generals = {1: AI_class(1), 2: AI_class(2)}
+                        
+                        while t < max_ticks:
+                            engine.step(dt, generals)
+                            t += dt
+                            p1 = engine.get_units_for_player(1)
+                            p2 = engine.get_units_for_player(2)
+                            if not p1 or not p2:
+                                break
+                        
+                        # Check winner
+                        p1_alive = len(engine.get_units_for_player(1))
+                        p2_alive = len(engine.get_units_for_player(2))
+                        
+                        if p1_alive > 0:
+                            win_count += 1
+                    
+                    win_rate = (win_count / args.N) * 100
+                    results.append((count, win_rate))
+                    print(f" {win_count}/{args.N} wins ({win_rate:.1f}%)")
+                    test_count += 1
+                
+                # Display results
+                print("\n" + "="*50)
+                print("PLOT RESULTS")
+                print("="*50)
+                print(f"{'Unit Count':<15} {'Win Rate':<15} {'Graph':<20}")
+                print("-"*50)
+                
+                for count, win_rate in results:
+                    bar_length = int(win_rate / 5)  # Scale to 20 chars max
+                    bar = '█' * bar_length + '░' * (20 - bar_length)
+                    print(f"{count:<15} {win_rate:>6.1f}%       {bar}")
+                
+                print("="*50)
+                print(f"Tested {test_count} combinations with {args.N} rounds each")
+                
+        except Exception as e:
+            print(f"Error in plot: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Handle view command
     elif args.command == 'view':
