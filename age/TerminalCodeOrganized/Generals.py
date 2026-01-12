@@ -1,5 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import random
+import math
+
 @dataclass
 class General:
     def __init__(self, player: int):

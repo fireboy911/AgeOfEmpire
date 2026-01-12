@@ -6,16 +6,25 @@ from Scenario import square_scenario, chevron_scenario
 import random
 import curses
 import time
-from Generals import DaftGeneral, BrainDeadGeneral
+from Generals import DaftGeneral, BrainDeadGeneral, New_General_1, New_General_2
 
 
 def get_ai_class(ai_name: str):
     """Get AI class by name"""
     ai_map = {
         'DaftGeneral': DaftGeneral,
-        'BrainDeadGeneral': BrainDeadGeneral
+        'BrainDeadGeneral': BrainDeadGeneral,
+        'New_General_1': New_General_1,
+        'New_General_2': New_General_2,
+        'DAFT': DaftGeneral,  # Short alias
+        'BRAINDEAD': BrainDeadGeneral,  # Short alias
     }
-    return ai_map.get(ai_name, DaftGeneral)
+    ai_class = ai_map.get(ai_name)
+    if ai_class is None:
+        print(f"Warning: AI '{ai_name}' not found. Available AIs: {', '.join(ai_map.keys())}")
+        print(f"Using DaftGeneral as default.")
+        return DaftGeneral
+    return ai_class
 
 
 def get_scenario(scenario_name: str):
