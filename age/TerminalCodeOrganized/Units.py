@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Tuple, Optional
+from typing import Tuple, Optional,List,Dict
 import math
 from GameData import UNIT_STATS, BONUS_DAMAGE
 
@@ -19,7 +19,12 @@ class Unit:
     color: Optional[Tuple[int,int,int]] = None
     reload_time: float = 2.0  # Temps entre deux attaques
     cooldown: float = 0.0     # Temps restant avant prochaine attaque
-
+    
+    tags: List[str] = field(default_factory=list)
+    bonuses: Dict[str, float] = field(default_factory=dict)
+    
+    radius: float = 0.4
+    
     def __post_init__(self):
         # 1. Charger les stats depuis GameData si non fournies
         stats = UNIT_STATS.get(self.unit_type, UNIT_STATS["Pikeman"]) # Fallback Pikeman
