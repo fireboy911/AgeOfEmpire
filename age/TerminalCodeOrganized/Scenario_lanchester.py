@@ -31,7 +31,7 @@ def lanchester_scenario(engine, unit_type, N):
     for i in range(2 * N):
         engine.spawn_unit(
             player=2, 
-            x=40 + (i % 5) * 0.5,
+            x=28 + (i % 5) * 0.5, #ppour avoire une bataille qui se fasse vite au debut 
             y=30 + (i // 5) * 0.5, 
             unit_type=unit_type, 
             **u_stats
