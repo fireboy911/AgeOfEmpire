@@ -437,3 +437,91 @@ class New_General_2(General):
 
         return best_enemy
 
+class New_General_3(General):
+    def __init__(self, player: int):
+        super().__init__(player)
+        self.last_update = 0.0
+        self.update_interval = 0.2
+
+        # per-unit state
+        self.commit_until = {}   # unit_id -> time
+        self.attacks_done = {}   # unit_id -> count
+
+    def give_orders(self, engine: "SimpleEngine"):
+        t = engine.tick
+        if t - self.last_update < self.update_interval:
+            return
+        self.last_update = t
+
+        my_units = engine.get_units_for_player(self.player)
+        enemies = [u for u in engine.units if u.player != self.player and u.alive]
+        if not enemies:
+            return
+
+        # focus fire map
+        focus = {}
+        for u in my_units:
+            if u.target_id is not None:
+                focus[u.target_id] = focus.get(u.target_id, 0) + 1
+
+        for u in my_units:
+            uid = id(u)
+
+            # initialize state
+            self.commit_until.setdefault(uid, 0.0)
+            self.attacks_done.setdefault(uid, 0)
+
+            # keep committed target
+            if u.target_id is not None:
+                tgt = engine.units_by_id.get(u.target_id)
+                if tgt and tgt.alive:
+                    if t < self.commit_until[uid]:
+                        # still committed — DO NOT CHANGE TARGET
+                        continue
+                else:
+                    u.target_id = None
+
+            # retreat only AFTER damage
+            if self.attacks_done[uid] >= 2 and u.hp < 20:
+                u.target_id = None
+                continue
+
+            # choose target
+            target = self.pick_target(u, enemies, focus)
+            if target:
+                u.target_id = target.id
+                self.commit_until[uid] = t + 2.0   # HARD COMMIT
+                self.attacks_done[uid] = 0
+
+    def pick_target(self, u, enemies, focus):
+        best = None
+        best_score = -9e9
+        ut = u.unit_type.lower()
+
+        for e in enemies:
+            dist = u.distance_to(e)
+            score = 0
+
+            # counters (simple, brutal)
+            if ut == "pikeman" and e.unit_type.lower() == "knight":
+                score += 80
+            if ut == "knight" and e.unit_type.lower() in ("crossbowman", "mage"):
+                score += 90
+            if ut == "crossbowman" and e.unit_type.lower() in ("mage", "crossbowman"):
+                score += 40
+
+            # generic DPS logic
+            score -= dist
+            score += (12 - e.hp * 0.12)
+
+            # FOCUS FIRE OVERRIDE
+            score += focus.get(e.id, 0) * 10
+
+            if score > best_score:
+                best_score = score
+                best = e
+
+        return best
+
+
+
