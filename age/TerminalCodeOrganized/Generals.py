@@ -440,82 +440,73 @@ class New_General_2(General):
 class New_General_3(General):
     def __init__(self, player: int):
         super().__init__(player)
-        self.last_update = 0.0
-        self.update_interval = 0.2
-
-        # per-unit state
-        self.commit_until = {}   # unit_id -> time
-        self.attacks_done = {}   # unit_id -> count
+        self.global_targets = {}   # unit_type -> enemy_id
+        self.retarget_cooldown = 0.0
 
     def give_orders(self, engine: "SimpleEngine"):
         t = engine.tick
-        if t - self.last_update < self.update_interval:
+        if t < self.retarget_cooldown:
             return
-        self.last_update = t
 
         my_units = engine.get_units_for_player(self.player)
         enemies = [u for u in engine.units if u.player != self.player and u.alive]
         if not enemies:
             return
 
-        # focus fire map
-        focus = {}
+        # clear dead targets
+        for k, eid in list(self.global_targets.items()):
+            if eid not in engine.units_by_id or not engine.units_by_id[eid].alive:
+                del self.global_targets[k]
+
+        # assign new global targets if missing
+        for ut in {"pikeman", "knight", "crossbowman", "mage"}:
+            if ut not in self.global_targets:
+                tgt = self.pick_global_target(ut, enemies, engine)
+                if tgt:
+                    self.global_targets[ut] = tgt.id
+
+        # enforce orders
         for u in my_units:
-            if u.target_id is not None:
-                focus[u.target_id] = focus.get(u.target_id, 0) + 1
+            ut = u.unit_type.lower()
 
-        for u in my_units:
-            uid = id(u)
-
-            # initialize state
-            self.commit_until.setdefault(uid, 0.0)
-            self.attacks_done.setdefault(uid, 0)
-
-            # keep committed target
-            if u.target_id is not None:
-                tgt = engine.units_by_id.get(u.target_id)
-                if tgt and tgt.alive:
-                    if t < self.commit_until[uid]:
-                        # still committed — DO NOT CHANGE TARGET
-                        continue
-                else:
-                    u.target_id = None
-
-            # retreat only AFTER damage
-            if self.attacks_done[uid] >= 2 and u.hp < 20:
-                u.target_id = None
+            # monks stay healers (do not fight)
+            if ut == "monk":
                 continue
 
-            # choose target
-            target = self.pick_target(u, enemies, focus)
-            if target:
-                u.target_id = target.id
-                self.commit_until[uid] = t + 2.0   # HARD COMMIT
-                self.attacks_done[uid] = 0
+            # HARD LOCK: do not retarget individually
+            if ut in self.global_targets:
+                u.target_id = self.global_targets[ut]
 
-    def pick_target(self, u, enemies, focus):
+        # retarget only after a kill wave
+        self.retarget_cooldown = t + 1.5
+
+    def pick_global_target(self, ut, enemies, engine):
         best = None
         best_score = -9e9
-        ut = u.unit_type.lower()
 
         for e in enemies:
-            dist = u.distance_to(e)
+            dist = 0  # distance is IRRELEVANT at this level
             score = 0
 
-            # counters (simple, brutal)
-            if ut == "pikeman" and e.unit_type.lower() == "knight":
+            # priority = damage removed per second
+            if e.unit_type.lower() in ("crossbowman", "mage"):
+                score += 120
+            if e.unit_type.lower() == "knight":
                 score += 80
-            if ut == "knight" and e.unit_type.lower() in ("crossbowman", "mage"):
-                score += 90
-            if ut == "crossbowman" and e.unit_type.lower() in ("mage", "crossbowman"):
-                score += 40
+            if e.unit_type.lower() == "pikeman":
+                score += 50
+            if e.unit_type.lower() == "monk":
+                score += 100
 
-            # generic DPS logic
-            score -= dist
-            score += (12 - e.hp * 0.12)
+            # favor already-engaged clusters
+            nearby_allies = sum(
+                1 for a in engine.units
+                if a.player == self.player and a.alive and e.distance_to(a) < 3.5
+            )
+            score += nearby_allies * 5
 
-            # FOCUS FIRE OVERRIDE
-            score += focus.get(e.id, 0) * 10
+            # fragile targets die faster → tempo advantage
+            score += (60 - e.hp)
 
             if score > best_score:
                 best_score = score
