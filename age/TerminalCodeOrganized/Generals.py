@@ -437,3 +437,82 @@ class New_General_2(General):
 
         return best_enemy
 
+class New_General_3(General):
+    def __init__(self, player: int):
+        super().__init__(player)
+        self.global_targets = {}   # unit_type -> enemy_id
+        self.retarget_cooldown = 0.0
+
+    def give_orders(self, engine: "SimpleEngine"):
+        t = engine.tick
+        if t < self.retarget_cooldown:
+            return
+
+        my_units = engine.get_units_for_player(self.player)
+        enemies = [u for u in engine.units if u.player != self.player and u.alive]
+        if not enemies:
+            return
+
+        # clear dead targets
+        for k, eid in list(self.global_targets.items()):
+            if eid not in engine.units_by_id or not engine.units_by_id[eid].alive:
+                del self.global_targets[k]
+
+        # assign new global targets if missing
+        for ut in {"pikeman", "knight", "crossbowman", "mage"}:
+            if ut not in self.global_targets:
+                tgt = self.pick_global_target(ut, enemies, engine)
+                if tgt:
+                    self.global_targets[ut] = tgt.id
+
+        # enforce orders
+        for u in my_units:
+            ut = u.unit_type.lower()
+
+            # monks stay healers (do not fight)
+            if ut == "monk":
+                continue
+
+            # HARD LOCK: do not retarget individually
+            if ut in self.global_targets:
+                u.target_id = self.global_targets[ut]
+
+        # retarget only after a kill wave
+        self.retarget_cooldown = t + 1.5
+
+    def pick_global_target(self, ut, enemies, engine):
+        best = None
+        best_score = -9e9
+
+        for e in enemies:
+            dist = 0  # distance is IRRELEVANT at this level
+            score = 0
+
+            # priority = damage removed per second
+            if e.unit_type.lower() in ("crossbowman", "mage"):
+                score += 120
+            if e.unit_type.lower() == "knight":
+                score += 80
+            if e.unit_type.lower() == "pikeman":
+                score += 50
+            if e.unit_type.lower() == "monk":
+                score += 100
+
+            # favor already-engaged clusters
+            nearby_allies = sum(
+                1 for a in engine.units
+                if a.player == self.player and a.alive and e.distance_to(a) < 3.5
+            )
+            score += nearby_allies * 5
+
+            # fragile targets die faster → tempo advantage
+            score += (60 - e.hp)
+
+            if score > best_score:
+                best_score = score
+                best = e
+
+        return best
+
+
+

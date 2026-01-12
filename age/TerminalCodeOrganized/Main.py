@@ -6,7 +6,7 @@ from Scenario import square_scenario, chevron_scenario, optimal_scenario, echelo
 import random
 import curses
 import time
-from Generals import DaftGeneral, BrainDeadGeneral, New_General_1, New_General_2
+from Generals import DaftGeneral, BrainDeadGeneral, New_General_1, New_General_2, New_General_3
 
 
 def get_ai_class(ai_name: str):
@@ -16,6 +16,7 @@ def get_ai_class(ai_name: str):
         'BrainDeadGeneral': BrainDeadGeneral,
         'New_General_1': New_General_1,
         'New_General_2': New_General_2,
+        'New_General_3': New_General_3,
         'DAFT': DaftGeneral,  # Short alias
         'BRAINDEAD': BrainDeadGeneral,  # Short alias
     }
