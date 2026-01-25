@@ -7,7 +7,8 @@ import random
 import curses
 import time
 from Generals import DaftGeneral, BrainDeadGeneral, New_General_1, New_General_2, New_General_3, GenghisKhanPrimeGeneral
-
+from Scenario_lanchester import lanchester_scenario
+from battle_plot import generate_lanchester_plot
 
 def get_ai_class(ai_name: str):
     """Get AI class by name"""
@@ -35,7 +36,8 @@ def get_scenario(scenario_name: str):
         'square_scenario': square_scenario,
         'chevron_scenario': chevron_scenario,
         'optimal_scenario': optimal_scenario,
-        'echelon_scenario': echelon_scenario
+        'echelon_scenario': echelon_scenario,
+        'lanchester_scenario': lanchester_scenario,
     }
     return scenario_map.get(scenario_name, square_scenario)
 
@@ -436,6 +438,10 @@ def main():
         print(f"Rounds per test: {args.N}\n")
         
         try:
+            if args.plotter == 'PlotLanchester':
+                print("Validation Scientifique : Génération du graphique Lanchester (PNG)...")
+                generate_lanchester_plot() # Appelle ton fichier battle_plot.py
+                return
             # Parse range from specification like "range (1,100)" or "range 1 100"
             import re
             
