@@ -514,5 +514,138 @@ class New_General_3(General):
 
         return best
 
+class GenghisKhanPrimeGeneral(General):
+    def give_orders(self, engine: "SimpleEngine"):
+        my_units = engine.get_units_for_player(self.player)
+        enemies = [u for u in engine.units if u.player != self.player and u.alive]
+        
+        if not enemies or not my_units:
+            return
+
+        # --- CONDITION DE SACRIFICE (improved) ---
+        # Activate Finish-Him if:
+        # 1. There are 15 enemies or less
+        # 2. Or Braindead-style rush (more enemies than us early)
+        advantage_ratio = len(my_units) / max(1, len(enemies))
+        finish_him = len(enemies) <= 15 or advantage_ratio >= 1.0
+
+        # Listes de menaces
+        pikes = [e for e in enemies if e.unit_type == "Pikeman"]
+        knights = [e for e in enemies if e.unit_type == "knight"]
+        
+        for u in my_units:
+            u_type = u.unit_type
+
+            # --- 1. ARBALÉTRIERS ---
+            if u_type == "Crossbowman":
+                # En mode FINISH HIM, on ne fuit plus du tout, on tire juste.
+                if not finish_him:
+                    nearest_threat = self.get_nearest(u, knights + pikes)
+                    if nearest_threat:
+                        dist = u.distance_to(nearest_threat)
+                        if dist < 3.5:
+                            # Stutter Step : On ne fuit que si on recharge
+                            if u.reload_timer > 0:
+                                self.move_away(u, nearest_threat, intensity=1.5)
+                                u.target_id = None
+                                continue
+
+            # --- 2. CHEVALIERS ---
+            if u_type == "knight":
+                # En mode FINISH HIM, on ignore la peur des piquiers.
+                if not finish_him:
+                    nearest_pike = self.get_nearest(u, pikes)
+                    if nearest_pike and u.distance_to(nearest_pike) < 2.5:
+                        self.move_away(u, nearest_pike, intensity=2.0)
+                        u.target_id = None
+                        continue
+
+            # --- 3. MOINES ---
+            if u_type == "Monk":
+                # Les moines restent prudents même à la fin (ils ne servent à rien au corps à corps)
+                threat = self.get_nearest(u, enemies)
+                if threat and u.distance_to(threat) < 2.5:
+                    self.move_away(u, threat, intensity=1.0)
+                    u.target_id = None
+                    continue
+                # Soin
+                allies_hurt = [a for a in my_units if a.hp < a.max_hp]
+                if allies_hurt:
+                    u.target_id = min(allies_hurt, key=lambda a: a.hp).id
+                continue
+
+            # --- 4. CHOIX DE CIBLE ---
+            # Optimisation : Si on a une cible valide à portée, on la garde
+            # Sauf en mode Finish Him où on veut être sûr de taper le plus proche
+            if not finish_him and u.target_id and u.target_id in engine.units_by_id:
+                curr = engine.units_by_id[u.target_id]
+                if curr.alive and u.distance_to(curr) <= u.range:
+                    continue
+
+            # On passe le flag finish_him à la fonction de ciblage
+            best = self.choose_target(u, enemies, finish_him)
+            if best:
+                u.target_id = best.id
+
+    def choose_target(self, u, enemies, finish_him):
+        best_score = -9999
+        best_target = None
+        u_type = u.unit_type
+
+        for e in enemies:
+            dist = u.distance_to(e)
+            
+            # En mode FINISH HIM, la distance est le seul critère important
+            if finish_him:
+                score = -dist * 10
+            else:
+                score = -dist * 3 
+                if e.hp < 10: score += 50
+            
+            e_type = e.unit_type
+
+            # --- LOGIQUE DE CONTRE (Désactivée en Finish Him) ---
+            if not finish_him:
+                if u_type == "Pikeman":
+                    if e_type == "knight": score += 200
+                    elif e_type == "Pikeman": score += 10
+                    
+                elif u_type == "knight":
+                    if e_type in ["Crossbowman", "Monk", "mage"]: score += 150
+                    # On évite le piquier SEULEMENT si on n'est pas en train de finir la game
+                    elif e_type == "Pikeman": score -= 500
+
+                elif u_type == "Crossbowman":
+                    if e_type == "Pikeman": score += 20 
+                    if e_type == "knight": score += 30
+                    if e_type == "Monk": score += 60
+            
+            # En mode Finish Him, on ajoute juste un petit bonus pour taper ce qu'on tape bien
+            # Mais sans pénalité négative massive qui empêcherait d'attaquer
+            else:
+                if u_type == "Pikeman" and e_type == "knight": score += 50
+
+            if score > best_score:
+                best_score = score
+                best_target = e
+        
+        return best_target
+
+    def get_nearest(self, u, collection):
+        if not collection: return None
+        return min(collection, key=lambda x: u.distance_to(x))
+
+    def move_away(self, u, threat, intensity=1.0):
+        dx = u.x - threat.x
+        dy = u.y - threat.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            u.x += (dx/dist) * u.speed * 0.2 * intensity
+            u.y += (dy/dist) * u.speed * 0.2 * intensity
+
+
+
+
+
 
 
