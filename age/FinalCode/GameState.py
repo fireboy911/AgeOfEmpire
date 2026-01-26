@@ -110,18 +110,31 @@ class GameStateManager:
     
     def restore_generals(self, state):
         """Restore generals from saved data"""
-        from Generals import DaftGeneral, BrainDeadGeneral, General
-        
+        # Import locally to avoid circulars at module import time
+        from Generals import (
+            DaftGeneral,
+            BrainDeadGeneral,
+            New_General_1,
+            New_General_2,
+            New_General_3,
+            GenghisKhanPrimeGeneral,
+            General,
+        )
+
+        general_map = {
+            'DaftGeneral': DaftGeneral,
+            'BrainDeadGeneral': BrainDeadGeneral,
+            'New_General_1': New_General_1,
+            'New_General_2': New_General_2,
+            'New_General_3': New_General_3,
+            'GenghisKhanPrimeGeneral': GenghisKhanPrimeGeneral,
+        }
+
         generals = {}
         for pid, gen_data in state['generals'].items():
             pid = int(pid)
-            if gen_data['type'] == 'DaftGeneral':
-                generals[pid] = DaftGeneral(pid)
-            elif gen_data['type'] == 'BrainDeadGeneral':
-                generals[pid] = BrainDeadGeneral(pid)
-            else:
-                # Default fallback
-                from Generals import General
-                generals[pid] = General(pid)
-        
+            gen_type = gen_data.get('type')
+            gen_cls = general_map.get(gen_type, DaftGeneral)  # Safe fallback to a working AI
+            generals[pid] = gen_cls(pid)
+
         return generals

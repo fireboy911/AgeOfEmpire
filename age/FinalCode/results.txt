@@ -1,3 +1,0 @@
-Battle data from pygame view
-Engine ticks: 1.13
-Events:
