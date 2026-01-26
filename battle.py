@@ -12,9 +12,9 @@ Usage:
 import sys
 import os
 
-# Add the TerminalCodeOrganized directory to the path so we can import modules
+# Add the FinalCode directory to the path so we can import modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
-terminal_code_dir = os.path.join(script_dir, 'age', 'TerminalCodeOrganized')
+terminal_code_dir = os.path.join(script_dir, 'age', 'FinalCode')
 if os.path.exists(terminal_code_dir):
     sys.path.insert(0, terminal_code_dir)
 else:
